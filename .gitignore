@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.vsix
+*.log
+.DS_Store
+
+# Claude Code local-only settings
+.claude/settings.local.json

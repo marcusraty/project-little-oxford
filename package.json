@@ -1,0 +1,67 @@
+{
+  "name": "project-viewer",
+  "displayName": "Project Viewer",
+  "description": "Render a JSON architecture diagram in VS Code.",
+  "version": "0.1.0",
+  "publisher": "marcusraty",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marcusraty/project-little-oxford.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "projectViewer.show",
+        "title": "Project Viewer: Show Diagram"
+      }
+    ],
+    "configuration": {
+      "title": "Project Viewer",
+      "properties": {
+        "projectViewer.layout.preset": {
+          "type": "string",
+          "enum": ["tiered", "layered"],
+          "enumDescriptions": [
+            "Group components by semantic tier (actors at top, data at bottom). Recommended for architecture diagrams.",
+            "Pure layered topological layout. ELK arranges purely by edge direction; no tier constraints."
+          ],
+          "default": "tiered",
+          "description": "Layout strategy used to position diagram boxes. Changes apply on the next render — the panel re-renders automatically when you change this setting."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "build:debug": "PROJECT_VIEWER_DEBUG=1 node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "watch:debug": "PROJECT_VIEWER_DEBUG=1 node esbuild.config.mjs --watch",
+    "replay": "npm run build && node dist/replay.js",
+    "test": "esbuild --bundle --platform=node --target=node18 --format=cjs --outfile=dist/tests.js tests/index.ts && node --test dist/tests.js",
+    "package": "npm run build && npx vsce package --out project-viewer.vsix",
+    "install:local": "node scripts/install-locally.mjs",
+    "uninstall:local": "node scripts/uninstall-locally.mjs",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/svg-pan-zoom": "^3.3.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "elkjs": "^0.9.3",
+    "svg-pan-zoom": "^3.6.2"
+  }
+}

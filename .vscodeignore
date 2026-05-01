@@ -1,0 +1,26 @@
+# Source — bundled into dist/extension.js and dist/webview.js by esbuild
+src/**
+scripts/**
+
+# Build configs — runtime doesn't need them
+tsconfig.json
+esbuild.config.mjs
+.gitignore
+
+# Source-only deps — already inlined by esbuild
+node_modules/**
+
+# Sourcemaps (drop to keep package small)
+**/*.map
+
+# Local-only state
+.claude/**
+.git/**
+.github/**
+.viewer/**
+
+# This file
+.vscodeignore
+
+# Existing VSIX artefacts
+**/*.vsix
