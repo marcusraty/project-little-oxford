@@ -1,14 +1,14 @@
 {
-  "name": "project-viewer",
-  "displayName": "Project Viewer",
+  "name": "little-oxford",
+  "displayName": "little-oxford",
   "description": "Render a JSON architecture diagram in VS Code.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "marcusraty",
   "private": true,
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/marcusraty/project-little-oxford.git"
+    "url": "https://github.com/marcusraty/little-oxford.git"
   },
   "engines": {
     "vscode": "^1.85.0"
@@ -20,48 +20,143 @@
   "contributes": {
     "commands": [
       {
-        "command": "projectViewer.show",
-        "title": "Project Viewer: Show Diagram"
+        "command": "little-oxford.show",
+        "title": "little-oxford: Show Diagram"
+      },
+      {
+        "command": "little-oxford.listSessions",
+        "title": "little-oxford: List CC Sessions"
+      },
+      {
+        "command": "little-oxford.pullAllLogs",
+        "title": "little-oxford: Pull All Historical Logs"
+      },
+      {
+        "command": "little-oxford.importRules",
+        "title": "little-oxford: Import Audit Rules"
+      },
+      {
+        "command": "little-oxford.bootstrap",
+        "title": "little-oxford: Create Starter Diagram"
+      },
+      {
+        "command": "little-oxford.openHelp",
+        "title": "little-oxford: Help"
       }
     ],
-    "configuration": {
-      "title": "Project Viewer",
-      "properties": {
-        "projectViewer.layout.preset": {
-          "type": "string",
-          "enum": ["tiered", "layered"],
-          "enumDescriptions": [
-            "Group components by semantic tier (actors at top, data at bottom). Recommended for architecture diagrams.",
-            "Pure layered topological layout. ELK arranges purely by edge direction; no tier constraints."
-          ],
-          "default": "tiered",
-          "description": "Layout strategy used to position diagram boxes. Changes apply on the next render — the panel re-renders automatically when you change this setting."
+    "views": {
+      "panel": [
+        {
+          "id": "little-oxford.audit",
+          "name": "little-oxford-audit",
+          "type": "webview"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "Diagram",
+        "properties": {
+          "little-oxford.layout.preset": {
+            "type": "string",
+            "enum": [
+              "tiered",
+              "layered"
+            ],
+            "enumDescriptions": [
+              "Group components by semantic tier (actors at top, data at bottom). Recommended for architecture diagrams.",
+              "Pure layered topological layout. ELK arranges purely by edge direction; no tier constraints."
+            ],
+            "default": "tiered",
+            "description": "Layout strategy used to position diagram boxes."
+          }
+        }
+      },
+      {
+        "title": "Audit",
+        "properties": {
+          "little-oxford.audit.enabled": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "Watch Claude Code JSONL transcripts and run audit rules. Disable to stop tracking agent activity."
+          },
+          "little-oxford.paths.auditLog": {
+            "type": "string",
+            "default": ".oxford/audit.jsonl",
+            "markdownDescription": "Audit event log file."
+          }
+        }
+      },
+      {
+        "title": "Rules",
+        "properties": {
+          "little-oxford.paths.rules": {
+            "type": "string",
+            "default": ".oxford/rules/",
+            "markdownDescription": "Directory containing audit rule files.\n\nEdits to files in this directory are picked up automatically by the rules watcher.\n\n[Edit Behavioral Rules](command:little-oxford.openRuleFile.behavioral)\n\n[Edit Companion Rules](command:little-oxford.openRuleFile.companion)\n\n[Import Rules from File](command:little-oxford.importRules)"
+          }
         }
       }
-    }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": ".oxford/rules/*.json",
+        "url": "./schemas/audit-rule.schema.json"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "little-oxford.ruleEditor",
+        "displayName": "Audit Rule Editor",
+        "selector": [
+          {
+            "filenamePattern": "**/.oxford/rules/*.json"
+          }
+        ],
+        "priority": "option"
+      }
+    ]
   },
   "scripts": {
-    "build": "node esbuild.config.mjs",
-    "build:debug": "PROJECT_VIEWER_DEBUG=1 node esbuild.config.mjs",
+    "postinstall": "node scripts/patch-vscode-test-playwright.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && node esbuild.config.mjs",
+    "build:debug": "tsc --noEmit && OXFORD_DEBUG=1 node esbuild.config.mjs",
     "watch": "node esbuild.config.mjs --watch",
-    "watch:debug": "PROJECT_VIEWER_DEBUG=1 node esbuild.config.mjs --watch",
+    "watch:debug": "OXFORD_DEBUG=1 node esbuild.config.mjs --watch",
     "replay": "npm run build && node dist/replay.js",
-    "test": "esbuild --bundle --platform=node --target=node18 --format=cjs --outfile=dist/tests.js tests/index.ts && node --test dist/tests.js",
-    "package": "npm run build && npx vsce package --out project-viewer.vsix",
+    "test": "npm run build && esbuild --bundle --platform=node --target=node18 --format=cjs --define:__DEBUG__=false --sourcemap --outfile=dist/tests.js tests/index.ts && node --test --enable-source-maps dist/tests.js",
+    "coverage": "npm run build && node scripts/coverage.mjs",
+    "build:harness": "esbuild --bundle --platform=node --target=node18 --format=cjs --define:__DEBUG__=false --outfile=dist/build-harness.js scripts/build-harness.ts && node dist/build-harness.js",
+    "test:e2e": "npm run build && npm run build:harness && npx playwright test --config playwright.config.ts",
+    "test:vscode": "npm run build && esbuild --bundle --platform=node --target=node18 --format=cjs --external:vscode --external:mocha --external:glob --outdir=dist/vscode-tests tests/vscode-e2e/runTest.ts tests/vscode-e2e/suite/index.ts tests/vscode-e2e/suite/integration.test.ts && node dist/vscode-tests/runTest.js",
+    "package": "npm run build && npx vsce package --out little-oxford.vsix",
     "install:local": "node scripts/install-locally.mjs",
+    "install:debug": "node scripts/install-locally.mjs --debug",
     "uninstall:local": "node scripts/uninstall-locally.mjs",
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@types/d3-drag": "^3.0.7",
+    "@types/d3-selection": "^3.0.11",
+    "@types/d3-transition": "^3.0.9",
+    "@types/d3-zoom": "^3.0.8",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20.0.0",
-    "@types/svg-pan-zoom": "^3.3.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.28.0",
+    "mocha": "^11.7.5",
+    "monocart-coverage-reports": "^2.12.11",
     "typescript": "^5.4.0"
   },
   "dependencies": {
-    "elkjs": "^0.9.3",
-    "svg-pan-zoom": "^3.6.2"
+    "d3-drag": "^3.0.0",
+    "d3-selection": "^3.0.0",
+    "d3-transition": "^3.0.1",
+    "d3-zoom": "^3.0.0",
+    "elkjs": "^0.9.3"
   }
 }

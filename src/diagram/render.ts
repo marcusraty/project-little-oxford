@@ -1,4 +1,4 @@
-// Project Viewer — diagram renderer (Diagram → SVG string).
+// little-oxford — diagram renderer (Diagram → SVG string).
 //
 // Pipeline, end to end:
 //   1. collectDiagnostics(): walks the diagram and produces warnings/errors
@@ -20,7 +20,8 @@
 
 // @ts-ignore — elkjs bundled entry has no subpath type export
 import ELKModule from 'elkjs/lib/elk.bundled.js';
-import type { Diagram, Layout, Rules, ComponentStyle, RelationshipStyle } from './types';
+import type { Diagram, Layout, Rules, ComponentStyle, RelationshipStyle, ActivityEntry } from './types';
+import { computeStaleness } from './activity';
 import { computeEdgeEndpoints, perpendicularLabelPos } from './geometry';
 import {
   applyLayoutSpec,
@@ -36,6 +37,12 @@ import {
 // runtime shape, the bundled .js file just doesn't ship matching .d.ts.
 const ELK = (ELKModule as unknown as { default: new () => { layout: (g: unknown) => Promise<unknown> } }).default;
 const elk = new ELK();
+
+// RD2: elkjs is single-threaded WASM under the hood; we serialize calls to
+// avoid any chance of interleaved state in long-running engine instances.
+// A model watcher fire + an audit-pipeline-triggered render can both call
+// computeLayout in the same tick; without this queue they'd race.
+let elkQueue: Promise<unknown> = Promise.resolve();
 
 // Visual constants. Box dimensions are fixed for v0.1 — every leaf node is
 // the same size — so ELK sees a uniform grid and produces tidy layouts.
@@ -82,6 +89,7 @@ export interface RenderOutput {
 export async function renderDiagram(
   model: Diagram,
   spec?: LayoutSpec,
+  activity?: Record<string, ActivityEntry>,
 ): Promise<RenderOutput> {
   const diagnostics: Diagnostic[] = [];
   collectDiagnostics(model, diagnostics);
@@ -106,7 +114,8 @@ export async function renderDiagram(
     throw e;
   }
   const computed = await computeLayout(model, resolved);
-  const svg = emitSvg(model, computed);
+  applyPinnedOverrides(model, computed);
+  const svg = emitSvg(model, computed, activity);
   // The returned layout uses PARENT-RELATIVE coords (matching ELK's native
   // convention). When a caller writes this back to model.json, the next
   // render feeds these coords back as interactive-mode pins.
@@ -148,7 +157,7 @@ function collectDiagnostics(model: Diagram, out: Diagnostic[]): void {
     }
   }
 
-  for (const [id, c] of Object.entries(model.components)) {
+  for (const c of Object.values(model.components)) {
     usedComponentKinds.add(c.kind);
   }
 
@@ -269,13 +278,17 @@ export function buildElkGraph(model: Diagram, spec?: LayoutSpec): unknown {
   const graph: ElkGraphRoot = {
     id: '__root__',
     children: [
-      ...Array.from(containers).map((cid) => ({
-        id: cid,
-        layoutOptions: {
-          'elk.padding': `[top=${PAD + 16},left=${PAD},bottom=${PAD},right=${PAD}]`,
-        },
-        children: childrenOf.get(cid)!.map(leafChild),
-      })),
+      ...Array.from(containers).map((cid) => {
+        const p = pin(cid);
+        return {
+          id: cid,
+          ...(p ? { x: p.x, y: p.y } : {}),
+          layoutOptions: {
+            'elk.padding': `[top=${PAD + 16},left=${PAD},bottom=${PAD},right=${PAD}]`,
+          },
+          children: childrenOf.get(cid)!.map(leafChild),
+        };
+      }),
       ...orphans.map(leafChild),
     ],
     edges: Object.entries(model.relationships)
@@ -289,8 +302,11 @@ export function buildElkGraph(model: Diagram, spec?: LayoutSpec): unknown {
 
 // Calls elkjs. Isolated as its own function so replay.ts can wrap or
 // substitute the engine without touching graph-building or result-walking.
+// Concurrent calls serialize through `elkQueue`.
 export async function runElk(graph: unknown): Promise<unknown> {
-  return elk.layout(graph);
+  const job = elkQueue.then(() => elk.layout(graph));
+  elkQueue = job.catch(() => undefined);
+  return job;
 }
 
 // Walks the ELK output tree, builds flat absolute + relative coord maps,
@@ -460,7 +476,7 @@ export type FullLayout = {
 // stays readable, and it keeps the bundle tiny. The one risk is XSS-by-
 // label-injection; esc() handles that for any user-supplied string we
 // drop into the output.
-export function emitSvg(model: Diagram, layout: FullLayout): string {
+export function emitSvg(model: Diagram, layout: FullLayout, activity?: Record<string, ActivityEntry>): string {
   const { canvasWidth: w, canvasHeight: h, viewBoxX: vx, viewBoxY: vy, components: coords } = layout;
   const containers = containerIds(model);
 
@@ -498,7 +514,8 @@ export function emitSvg(model: Diagram, layout: FullLayout): string {
 
   for (const [id, c] of Object.entries(model.components)) {
     if (containers.has(id)) continue;
-    parts.push(`<g data-component-id="${esc(id)}">${drawBox(coords[id], c.label, c.kind, model.rules)}</g>`);
+    const staleness = activity?.[id] ? computeStaleness(activity[id]) : undefined;
+    parts.push(`<g data-component-id="${esc(id)}">${drawBox(coords[id], c.label, c.kind, model.rules, staleness)}</g>`);
   }
 
   // Group relationships by unordered {from, to} pair. Multiple edges
@@ -552,19 +569,27 @@ function drawBox(
   label: string,
   kind: string,
   rules?: Rules,
+  staleness?: 'fresh' | 'stale' | 'unknown',
 ): string {
   const style = rules?.component_styles?.[kind] ?? DEFAULT_COMPONENT;
   const paint = paintAttrs(style.fill, style.color);
   const dash = style.border === 'dashed' ? ' stroke-dasharray="5 3"' : '';
   const shape =
-    style.symbol === 'cylinder' ? cylinder(p, paint, dash) : rounded(p, paint, dash);
+    style.symbol === 'cylinder' ? cylinder(p, paint, dash) :
+    style.symbol === 'diamond'  ? diamond(p, paint, dash)  :
+                                  rounded(p, paint, dash);
 
-  // Vertically center the label in the box (dominant-baseline="central"
-  // anchors text by its visual middle, not its baseline).
   const cx = p.x + p.w / 2;
   const cy = p.y + p.h / 2;
   const title = `<text x="${cx}" y="${cy}" font-size="13" font-weight="600" class="pv-title" text-anchor="middle" dominant-baseline="central">${esc(label)}</text>`;
-  return shape + title;
+
+  let dot = '';
+  if (staleness === 'fresh' || staleness === 'stale') {
+    const fill = staleness === 'fresh' ? '#22c55e' : '#ef4444';
+    dot = `<circle class="pv-staleness-dot" cx="${p.x + p.w - 10}" cy="${p.y + 10}" r="5" fill="${fill}" stroke="none"/>`;
+  }
+
+  return shape + title + dot;
 }
 
 function rounded(p: { x: number; y: number; w: number; h: number }, paint: string, dash: string): string {
@@ -579,6 +604,15 @@ function cylinder(p: { x: number; y: number; w: number; h: number }, paint: stri
     `<path d="M${p.x},${p.y + ry} L${p.x},${p.y + p.h - ry} A${rx},${ry} 0 0 0 ${p.x + p.w},${p.y + p.h - ry} L${p.x + p.w},${p.y + ry}"${paint} stroke-width="1.5"${dash}/>` +
     `<ellipse cx="${p.x + rx}" cy="${p.y + p.h - ry}" rx="${rx}" ry="${ry}"${paint} stroke-width="1.5"${dash}/>`
   );
+}
+
+// Diamond / rhombus — flowchart decision shape. Vertices at the midpoints
+// of the bounding box's edges, so labels still center cleanly even though
+// the shape's interior tapers toward the corners (keep labels short).
+function diamond(p: { x: number; y: number; w: number; h: number }, paint: string, dash: string): string {
+  const cx = p.x + p.w / 2;
+  const cy = p.y + p.h / 2;
+  return `<path d="M${cx},${p.y} L${p.x + p.w},${cy} L${cx},${p.y + p.h} L${p.x},${cy} Z"${paint} stroke-width="1.5"${dash}/>`;
 }
 
 // An EdgeGroup is one or more relationships between the same pair of
@@ -602,7 +636,7 @@ function buildEdgeGroups(
   const groups = new Map<string, EdgeGroup>();
   for (const [rid, r] of Object.entries(relationships)) {
     if (!coords[r.from] || !coords[r.to]) continue;
-    const sortedKey = [r.from, r.to].slice().sort().join('\x00');
+    const sortedKey = [r.from, r.to].sort().join('\x00');
     let g = groups.get(sortedKey);
     if (!g) {
       g = { rids: [], fromId: r.from, toId: r.to, bidirectional: false };
@@ -700,10 +734,89 @@ function drawEdgeGroup(
 // that another component points at via `parent` is a container. This lets
 // the schema stay simple (no kind tag for containers), at the cost of
 // requiring this small lookup pass.
+// Applies the user's saved pins (`model.layout.components`) on top of the
+// raw ELK layout. Two different semantics:
+//
+//   - Container pinned: shift the container + every direct child by the
+//     same delta, so the children's relative positions inside the container
+//     are preserved.
+//   - Leaf pinned: set the leaf's relative position directly to the pin.
+//     For a root-level leaf, relative == absolute. For a leaf inside a
+//     container, absolute = parent.absolute + pin.
+//
+// Containers are processed first so a pinned leaf inside a pinned container
+// sees the container's absolute position already updated.
+function applyPinnedOverrides(model: Diagram, layout: FullLayout): number {
+  const pins = model.layout?.components;
+  if (!pins) return 0;
+
+  let count = 0;
+  const containers = containerIds(model);
+
+  // Pass 1 — containers (shift + cascade to children).
+  for (const cid of containers) {
+    const pinned = pins[cid];
+    const elkPos = layout.relative[cid];
+    if (!pinned || !elkPos) continue;
+
+    const dx = pinned.x - elkPos.x;
+    const dy = pinned.y - elkPos.y;
+    if (dx === 0 && dy === 0) continue;
+    count++;
+
+    layout.components[cid] = {
+      ...layout.components[cid],
+      x: layout.components[cid].x + dx,
+      y: layout.components[cid].y + dy,
+    };
+    layout.relative[cid] = { ...elkPos, x: pinned.x, y: pinned.y };
+
+    for (const [childId, comp] of Object.entries(model.components)) {
+      if (comp.parent !== cid) continue;
+      if (layout.components[childId]) {
+        layout.components[childId] = {
+          ...layout.components[childId],
+          x: layout.components[childId].x + dx,
+          y: layout.components[childId].y + dy,
+        };
+      }
+    }
+  }
+
+  // Pass 2 — leaf pins (direct override of position).
+  for (const [id, comp] of Object.entries(model.components)) {
+    if (containers.has(id)) continue;
+    const pinned = pins[id];
+    if (!pinned) continue;
+    const elkRel = layout.relative[id];
+    if (!elkRel) continue;
+    if (elkRel.x === pinned.x && elkRel.y === pinned.y) continue;
+    count++;
+
+    layout.relative[id] = { ...elkRel, x: pinned.x, y: pinned.y };
+    const parentAbs = comp.parent ? layout.components[comp.parent] : undefined;
+    if (parentAbs) {
+      layout.components[id] = {
+        ...layout.components[id],
+        x: parentAbs.x + pinned.x,
+        y: parentAbs.y + pinned.y,
+      };
+    } else {
+      layout.components[id] = {
+        ...layout.components[id],
+        x: pinned.x,
+        y: pinned.y,
+      };
+    }
+  }
+
+  return count;
+}
+
 function containerIds(model: Diagram): Set<string> {
   const ids = new Set<string>();
   for (const c of Object.values(model.components)) {
-    if (c.parent !== null) ids.add(c.parent);
+    if (c.parent) ids.add(c.parent);
   }
   return ids;
 }
@@ -712,6 +825,11 @@ function containerIds(model: Diagram): Set<string> {
 // in turn often comes from user-controlled source files — without escaping,
 // a label like `<script>` would inject markup into the SVG output.
 function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 

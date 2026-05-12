@@ -1,11 +1,24 @@
-import svgPanZoom from 'svg-pan-zoom';
+// little-oxford diagram webview script.
+//
+// d3-zoom, d3-drag, tooltip, focus, legend, popover — all sharing
+// module-scope DOM refs and SVG state. Pure metadata-table rendering
+// lives in webview_metadata.ts; the rest stays here because the
+// DOM-bound functions can't easily be extracted without passing every
+// element ref through.
+import { select, type Selection } from 'd3-selection';
+import 'd3-transition';
+import { zoom as d3Zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from 'd3-zoom';
+import { drag as d3Drag } from 'd3-drag';
 import { recorder, installRecorder, bridgeSink } from '../diagnostics';
-import { Disposables } from './disposables';
+import { collectDescendants } from '../diagram/descendants';
+import { renderMetadataTable } from './webview_metadata';
 import {
   computeEdgeEndpoints,
   perpendicularLabelPos,
   type BoxRect,
 } from '../diagram/geometry';
+import { timeAgo } from '../diagram/time';
+import { escapeHtml, escapeAttr } from '../audit/html_escape';
 
 declare function acquireVsCodeApi(): { postMessage: (msg: unknown) => void };
 const vscode = acquireVsCodeApi();
@@ -48,9 +61,40 @@ const legendToggle = document.getElementById('legend-toggle') as HTMLButtonEleme
 const resetButton = document.getElementById('reset-button') as HTMLButtonElement;
 const settingsButton = document.getElementById('settings-button') as HTMLButtonElement;
 
+const modelPicker = document.getElementById('model-picker') as HTMLSelectElement;
+
 settingsButton.addEventListener('click', () => {
   vscode.postMessage({ type: 'open-settings' });
 });
+
+const helpButton = document.getElementById('help-button') as HTMLButtonElement | null;
+if (helpButton) helpButton.addEventListener('click', () => vscode.postMessage({ type: 'open-help' }));
+
+
+modelPicker.addEventListener('change', () => {
+  vscode.postMessage({ type: 'set-active-model', name: modelPicker.value });
+});
+
+// Reflects the host's view of which .oxford/*.json files exist and which
+// one is currently active. Hidden when there's nothing to pick from
+// (single file or no folder open). The `data-known-list` cache avoids
+// rebuilding <option> nodes every render — the dropdown's open state is
+// preserved in the common case where the file list hasn't changed.
+function updateModelPicker(activeModel: string | undefined, availableModels: string[] | undefined): void {
+  if (!availableModels || availableModels.length === 0) {
+    modelPicker.classList.add('hidden');
+    return;
+  }
+  const desired = availableModels.join('|');
+  if (modelPicker.dataset.knownList !== desired) {
+    modelPicker.innerHTML = availableModels
+      .map((n) => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`)
+      .join('');
+    modelPicker.dataset.knownList = desired;
+  }
+  if (activeModel) modelPicker.value = activeModel;
+  modelPicker.classList.remove('hidden');
+}
 const modalBackdrop = document.getElementById('modal-backdrop') as HTMLDivElement;
 const modalMessage = document.getElementById('modal-message') as HTMLDivElement;
 const modalOk = document.getElementById('modal-ok') as HTMLButtonElement;
@@ -93,8 +137,8 @@ resetButton.addEventListener('click', async () => {
   const ok = await customConfirm(
     'Reset the layout?\n\n' +
       'This re-runs the layout engine (ELK) and discards every box ' +
-      "position you've dragged. The components and relationships in " +
-      "model.json aren't touched — only the saved positions.",
+      "position you've dragged. The diagram definition " +
+      "isn't touched — only the saved positions in layout.json.",
   );
   if (!ok) return;
   vscode.postMessage({ type: 'reset-layout' });
@@ -135,9 +179,6 @@ function showDiagnostics(items: Diagnostic[]): void {
   diagBox.classList.remove('hidden');
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 // Renders the legend overlay from the diagram's `rules` block. One row
 // per component kind: a swatch matching the kind's symbol/color/border
@@ -177,12 +218,12 @@ function componentSwatch(style: ComponentStyle): string {
   if (style.symbol === 'cylinder') {
     return `<svg width="20" height="14" viewBox="0 0 20 14"><ellipse cx="10" cy="3" rx="8" ry="2.5" fill="${fill}" stroke="${stroke}" stroke-width="1.2"${dash}/><path d="M2,3 L2,11 A8,2.5 0 0 0 18,11 L18,3" fill="${fill}" stroke="${stroke}" stroke-width="1.2"${dash}/><ellipse cx="10" cy="11" rx="8" ry="2.5" fill="${fill}" stroke="${stroke}" stroke-width="1.2"${dash}/></svg>`;
   }
+  if (style.symbol === 'diamond') {
+    return `<svg width="20" height="14" viewBox="0 0 20 14"><path d="M10,1 L19,7 L10,13 L1,7 Z" fill="${fill}" stroke="${stroke}" stroke-width="1.2"${dash}/></svg>`;
+  }
   return `<svg width="20" height="14" viewBox="0 0 20 14"><rect x="1" y="1" width="18" height="12" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1.2"${dash}/></svg>`;
 }
 
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-}
 
 // ── Legend: drag + collapse ────────────────────────────────────────────────
 //
@@ -277,34 +318,34 @@ interface CachedDiagram {
 }
 
 let currentDiagram: CachedDiagram | null = null;
+let currentActivity: Record<string, { last_read: string; last_read_session: string; last_edit?: string; last_edit_session?: string; last_model_update?: string; last_model_update_verified?: boolean }> = {};
+
+// Click-toggle focus: which component (if any) the user has selected to
+// "spotlight." Connected edges/components stay full-color; the rest fade.
+// Cleared on rerender (the new SVG won't carry the previous focus class
+// anyway, and the focused id might no longer exist after a model edit).
+let focusedComponentId: string | null = null;
 
 diagSummary.addEventListener('click', () => {
   diagList.classList.toggle('hidden');
 });
 
-let panZoom: SvgPanZoom.Instance | undefined;
+let zoomBehavior: ZoomBehavior<SVGSVGElement, unknown> | undefined;
+let currentTransform: ZoomTransform = zoomIdentity;
+let svgSelection: Selection<SVGSVGElement, unknown, null, undefined> | undefined;
+let viewportG: SVGGElement | undefined;
+let savedViewBox: { x: number; y: number; w: number; h: number } | undefined;
 let mode: 'pan' | 'edit' = 'pan';
 
 function setMode(next: 'pan' | 'edit'): void {
   mode = next;
-  // The active-state styling is driven entirely by `body[data-mode]` and
-  // CSS — no per-button class flipping here. Single source of truth.
   document.body.dataset.mode = mode;
-  if (!panZoom) return;
-  if (mode === 'pan') {
-    panZoom.enablePan();
-    panZoom.enableZoom();
-    panZoom.enableDblClickZoom();
-  } else {
-    panZoom.disablePan();
-    panZoom.disableDblClickZoom();
-  }
 }
 
 modePanBtn.addEventListener('click', () => setMode('pan'));
 modeEditBtn.addEventListener('click', () => setMode('edit'));
 
-// Zoom slider <-> svg-pan-zoom binding.
+// Zoom slider <-> d3-zoom binding.
 //
 // Slider position is mapped to zoom level via log10 because the zoom range
 // is multiplicative (0.1 → 20 spans 2.3 orders of magnitude). Linear
@@ -326,30 +367,29 @@ function syncZoomUI(zoom: number): void {
 }
 
 zoomSlider.addEventListener('input', () => {
-  if (!panZoom) return;
-  const zoom = Math.pow(10, Number(zoomSlider.value));
-  panZoom.zoom(zoom);
-  // svg-pan-zoom's onZoom callback updates the label; setting it here
-  // too keeps the readout snappy during a continuous drag.
-  zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
+  if (!svgSelection || !zoomBehavior) return;
+  const k = Math.pow(10, Number(zoomSlider.value));
+  svgSelection.call(zoomBehavior.scaleTo, k);
+  zoomLabel.textContent = `${Math.round(k * 100)}%`;
 });
 
-zoomInBtn.addEventListener('click', () => panZoom?.zoomBy(1.2));
-zoomOutBtn.addEventListener('click', () => panZoom?.zoomBy(1 / 1.2));
+zoomInBtn.addEventListener('click', () => {
+  if (svgSelection && zoomBehavior) svgSelection.call(zoomBehavior.scaleBy, 1.2);
+});
+zoomOutBtn.addEventListener('click', () => {
+  if (svgSelection && zoomBehavior) svgSelection.call(zoomBehavior.scaleBy, 1 / 1.2);
+});
 zoomFitBtn.addEventListener('click', () => {
-  if (!panZoom) return;
-  // resize() picks up any container size change since init; reset()
-  // restores the original fitted+centered view (zoom AND pan). Calling
-  // fit() alone leaves the user's pan offset in place, which makes the
-  // button feel broken — diagram is "fitted" by zoom but still shoved
-  // into a corner.
-  panZoom.resize();
-  panZoom.reset();
+  if (!svgSelection || !zoomBehavior) return;
+  const fit = computeFitTransform(svgSelection.node()!);
+  svgSelection.transition().duration(300).call(zoomBehavior.transform, fit);
 });
 
 function showEmpty(message: string): void {
-  panZoom?.destroy();
-  panZoom = undefined;
+  svgSelection?.on('.zoom', null);
+  svgSelection = undefined;
+  zoomBehavior = undefined;
+  viewportG = undefined;
   stage.innerHTML = '';
   empty.textContent = message;
   empty.classList.remove('hidden');
@@ -361,9 +401,26 @@ function showEmpty(message: string): void {
   legendBox.classList.add('hidden');
 }
 
+function computeFitTransform(svgEl: SVGSVGElement): ZoomTransform {
+  const vb = savedViewBox;
+  if (!vb) return zoomIdentity;
+  const cw = svgEl.clientWidth || svgEl.parentElement!.clientWidth;
+  const ch = svgEl.clientHeight || svgEl.parentElement!.clientHeight;
+  const scale = Math.min(cw / vb.w, ch / vb.h);
+  const tx = (cw - vb.w * scale) / 2 - vb.x * scale;
+  const ty = (ch - vb.h * scale) / 2 - vb.y * scale;
+  return zoomIdentity.translate(tx, ty).scale(scale);
+}
+
 function showSvg(svg: string, traceId?: string): void {
-  panZoom?.destroy();
-  panZoom = undefined;
+  const hadPriorView = !!svgSelection;
+  const savedT = hadPriorView ? currentTransform : undefined;
+  svgSelection?.on('.zoom', null);
+  svgSelection = undefined;
+  zoomBehavior = undefined;
+  viewportG = undefined;
+
+  focusedComponentId = null;
   stage.innerHTML = svg;
   empty.classList.add('hidden');
   modeToggle.classList.remove('hidden');
@@ -373,23 +430,50 @@ function showSvg(svg: string, traceId?: string): void {
 
   const svgEl = stage.querySelector('svg') as SVGSVGElement | null;
   if (!svgEl) return;
+
+  const vb = svgEl.viewBox.baseVal;
+  savedViewBox = { x: vb.x, y: vb.y, w: vb.width, h: vb.height };
+
+  svgEl.removeAttribute('viewBox');
   svgEl.removeAttribute('width');
   svgEl.removeAttribute('height');
   svgEl.setAttribute('width', '100%');
   svgEl.setAttribute('height', '100%');
-  panZoom = svgPanZoom(svgEl, {
-    zoomEnabled: true,
-    panEnabled: true,
-    controlIconsEnabled: false,
-    fit: true,
-    center: true,
-    minZoom: ZOOM_MIN,
-    maxZoom: ZOOM_MAX,
-    onZoom: syncZoomUI,
-  });
-  // Initial sync: svg-pan-zoom's `fit` adjusts zoom on creation but
-  // doesn't fire onZoom for the initial fit, so we read it back manually.
-  syncZoomUI(panZoom.getZoom());
+
+  const vg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  const children = Array.from(svgEl.childNodes).filter(
+    (n) => n.nodeType === Node.ELEMENT_NODE && (n as Element).tagName !== 'defs',
+  );
+  for (const child of children) vg.appendChild(child);
+  svgEl.appendChild(vg);
+  viewportG = vg;
+
+  const sel = select(svgEl);
+  svgSelection = sel as any;
+
+  const zb = d3Zoom<SVGSVGElement, unknown>()
+    .scaleExtent([ZOOM_MIN, ZOOM_MAX])
+    .filter((event) => {
+      if (event.type === 'wheel') return true;
+      if (mode === 'edit') return false;
+      return true;
+    })
+    .on('zoom', (event) => {
+      currentTransform = event.transform;
+      vg.setAttribute('transform', event.transform.toString());
+      syncZoomUI(event.transform.k);
+    });
+  zoomBehavior = zb;
+
+  sel.call(zb);
+
+  if (hadPriorView && savedT) {
+    sel.call(zb.transform, savedT);
+  } else {
+    const fit = computeFitTransform(svgEl);
+    sel.call(zb.transform, fit);
+  }
+
   setMode(mode);
   wireDrag(svgEl);
   wireInteractions(svgEl);
@@ -400,7 +484,7 @@ function showSvg(svg: string, traceId?: string): void {
 // DOM after the SVG is in the page. This is the "what does the user see"
 // measurement — the final coord in the pipeline. If this disagrees with
 // the host's rerender-end output layout, the bug is between SVG-build and
-// DOM-paint (CSS, panZoom transforms, etc.). If it agrees, the bug is
+// DOM-paint (CSS, d3-zoom transforms, etc.). If it agrees, the bug is
 // upstream.
 function emitSvgApplied(svgEl: SVGSVGElement, traceId?: string): void {
   const groups = svgEl.querySelectorAll('[data-component-id]');
@@ -423,16 +507,42 @@ function emitSvgApplied(svgEl: SVGSVGElement, traceId?: string): void {
 
 function wireInteractions(svgEl: SVGSVGElement): void {
   svgEl.addEventListener('click', (e) => {
-    if (mode === 'edit') return;
     const target = e.target as Element | null;
-
     const componentGroup = target?.closest('[data-component-id]') as SVGGElement | null;
+    if (__DEBUG__) {
+      recorder.emit('webview', 'click', {
+        mode,
+        targetTag: target?.tagName,
+        componentId: componentGroup?.getAttribute('data-component-id') ?? null,
+        hasDiagram: !!currentDiagram,
+        relCount: currentDiagram ? Object.keys(currentDiagram.relationships).length : 0,
+        focusedBefore: focusedComponentId,
+      });
+    }
+    if (mode === 'edit') return;
+
     if (componentGroup) {
       const id = componentGroup.getAttribute('data-component-id')!;
-      const c = currentDiagram?.components[id];
-      const codeAnchor = c?.anchors?.find((a) => a.type === 'file' || a.type === 'function' || a.type === 'symbol');
-      if (codeAnchor) {
-        vscode.postMessage({ type: 'open-anchor', value: codeAnchor.value });
+
+      if (e.metaKey || e.ctrlKey) {
+        const c = currentDiagram?.components[id];
+        const codeAnchor = c?.anchors?.find(
+          (a) => a.type === 'file' || a.type === 'function' || a.type === 'symbol',
+        );
+        if (codeAnchor) {
+          vscode.postMessage({ type: 'open-anchor', value: codeAnchor.value });
+        }
+        return;
+      }
+
+      // Plain click → toggle focus on this component. Re-clicking the
+      // currently-focused component clears focus.
+      if (focusedComponentId === id) {
+        clearFocus();
+        focusedComponentId = null;
+      } else {
+        applyFocus(id);
+        focusedComponentId = id;
       }
       return;
     }
@@ -447,7 +557,12 @@ function wireInteractions(svgEl: SVGSVGElement): void {
       return;
     }
 
+    // Click on empty canvas → clear focus + dismiss popover.
     hidePopover();
+    if (focusedComponentId) {
+      clearFocus();
+      focusedComponentId = null;
+    }
   });
 
   svgEl.addEventListener('mouseenter', handleMouseEnter, true);
@@ -473,6 +588,65 @@ function handleMouseMove(e: MouseEvent): void {
 
 function handleMouseLeave(): void {
   hideTooltip();
+}
+
+// Hover-focus: dim every component and edge that isn't directly connected
+// to the hovered one, so the focused node's neighborhood stands out.
+// Connected = the hovered component itself + any component reachable in one
+// edge hop. Edges that touch the hovered component keep full opacity; the
+// rest get the .pv-faded class.
+function applyFocus(id: string): void {
+  const svgEl = stage.querySelector('svg') as SVGSVGElement | null;
+  if (!svgEl) return;
+
+  const connected = new Set<string>([id]);
+  if (currentDiagram) {
+    for (const r of Object.values(currentDiagram.relationships)) {
+      if (r.from === id) connected.add(r.to);
+      else if (r.to === id) connected.add(r.from);
+    }
+  }
+  if (__DEBUG__) {
+    recorder.emit('webview', 'apply-focus-before', {
+      id, connected: [...connected],
+    });
+  }
+
+  svgEl.querySelectorAll<SVGGElement>('[data-relationship-group]').forEach((g) => {
+    const from = g.getAttribute('data-from');
+    const to = g.getAttribute('data-to');
+    if (from === id || to === id) g.classList.remove('pv-faded');
+    else g.classList.add('pv-faded');
+  });
+
+  svgEl.querySelectorAll<SVGGElement>('[data-component-id]').forEach((g) => {
+    const cid = g.getAttribute('data-component-id');
+    if (!cid || connected.has(cid)) g.classList.remove('pv-faded');
+    else g.classList.add('pv-faded');
+  });
+
+  if (__DEBUG__) {
+    const faded: string[] = [];
+    const visible: string[] = [];
+    svgEl.querySelectorAll<SVGGElement>('[data-component-id]').forEach((g) => {
+      const cid = g.getAttribute('data-component-id')!;
+      const isFaded = g.classList.contains('pv-faded');
+      const opacity = getComputedStyle(g).opacity;
+      const classAttr = g.getAttribute('class') ?? '';
+      (isFaded ? faded : visible).push(`${cid}(op=${opacity},cls=${classAttr})`);
+    });
+    const fadedEdges = svgEl.querySelectorAll('[data-relationship-group].pv-faded').length;
+    const totalEdges = svgEl.querySelectorAll('[data-relationship-group]').length;
+    recorder.emit('webview', 'apply-focus-after', {
+      id, visible, faded, fadedEdges, totalEdges,
+    });
+  }
+}
+
+function clearFocus(): void {
+  const svgEl = stage.querySelector('svg') as SVGSVGElement | null;
+  if (!svgEl) return;
+  svgEl.querySelectorAll<SVGGElement>('.pv-faded').forEach((el) => el.classList.remove('pv-faded'));
 }
 
 let tooltipEl: HTMLDivElement | undefined;
@@ -515,15 +689,45 @@ function showTooltip(id: string, c: CachedDiagram['components'][string]): void {
       .join('');
     lines.push(`<div style="margin-top:6px;font-size:11px">${items}</div>`);
   }
+  const act = currentActivity[id];
+  if (act?.last_read) {
+    const readSession = act.last_read_session ? ` (${act.last_read_session.slice(0, 8)})` : '';
+    lines.push(`<div style="margin-top:6px;font-size:11px;color:#94a3b8">Last read ${escapeHtml(timeAgo(act.last_read))}${escapeHtml(readSession)}</div>`);
+    if (act.last_edit) {
+      const editSession = act.last_edit_session ? ` (${act.last_edit_session.slice(0, 8)})` : '';
+      lines.push(`<div style="font-size:11px;color:#94a3b8">Last edited ${escapeHtml(timeAgo(act.last_edit))}${escapeHtml(editSession)}</div>`);
+    }
+    let statusText: string;
+    let statusColor: string;
+    if (act.last_model_update) {
+      const updatedAgo = escapeHtml(timeAgo(act.last_model_update));
+      const verified = act.last_model_update_verified !== false;
+      const olderThanEdit = act.last_edit && act.last_edit > act.last_model_update;
+      if (!verified) {
+        statusText = `Diagram updated ${updatedAgo} (unverified)`;
+        statusColor = '#ef4444';
+      } else if (olderThanEdit) {
+        statusText = `Diagram updated ${updatedAgo} — older than last file edit`;
+        statusColor = '#ef4444';
+      } else {
+        statusText = `Diagram updated ${updatedAgo} (verified)`;
+        statusColor = '#22c55e';
+      }
+    } else if (act.last_edit && act.last_edit > act.last_read) {
+      statusText = 'Diagram never updated for this component';
+      statusColor = '#ef4444';
+    } else {
+      statusText = 'No edits since read';
+      statusColor = '#22c55e';
+    }
+    lines.push(`<div style="font-size:11px;color:${statusColor}">${statusText}</div>`);
+  }
   const known = new Set(['kind', 'label', 'description', 'parent', 'anchors']);
   const extras = Object.entries(c)
     .filter(([k]) => !known.has(k))
     .filter(([, v]) => v !== undefined && v !== null);
   if (extras.length) {
-    const items = extras
-      .map(([k, v]) => `<div style="margin-top:2px"><span style="color:#64748b">${escapeHtml(k)}:</span> ${escapeHtml(JSON.stringify(v))}</div>`)
-      .join('');
-    lines.push(`<div style="margin-top:6px;font-size:11px;color:#cbd5e1">${items}</div>`);
+    lines.push(renderMetadataTable(Object.fromEntries(extras)));
   }
   el.innerHTML = lines.join('');
   el.style.display = 'block';
@@ -564,7 +768,9 @@ function ensurePopover(): HTMLDivElement {
     'padding:8px 10px',
     'font-size:12px',
     'font-family:inherit',
-    'max-width:380px',
+    'max-width:460px',
+    'max-height:70vh',
+    'overflow-y:auto',
     'box-shadow:0 4px 12px rgba(0,0,0,0.5)',
     'display:none',
   ].join(';');
@@ -601,13 +807,7 @@ function showRelationshipGroupPopover(
       `<div style="color:var(--vscode-descriptionForeground);font-size:11px;margin-top:2px">${escapeHtml(r.from)} → ${escapeHtml(r.to)}</div>`,
     );
     if (r.metadata && Object.keys(r.metadata).length > 0) {
-      const items = Object.entries(r.metadata)
-        .map(
-          ([k, v]) =>
-            `<div style="margin-top:2px"><span style="color:var(--vscode-descriptionForeground)">${escapeHtml(k)}:</span> ${escapeHtml(JSON.stringify(v))}</div>`,
-        )
-        .join('');
-      lines.push(`<div style="margin-top:6px;font-size:11px">${items}</div>`);
+      lines.push(renderMetadataTable(r.metadata));
     }
     sections.push(lines.join(''));
     if (i < rels.length - 1) {
@@ -636,13 +836,6 @@ function hidePopover(): void {
   if (popoverEl) popoverEl.style.display = 'none';
 }
 
-// Disposables for the listeners attached on each `wireDrag` call. The
-// drag handlers live on `window` (not on the svg element) so the cursor
-// keeps tracking when it leaves the canvas; without explicit removal,
-// every rerender stacks a fresh pair on top of the previous ones and
-// they leak for the lifetime of the panel.
-let dragDisposables: Disposables | undefined;
-
 // One edge that's connected to the currently-dragging component. Cached
 // on drag-start so per-frame updates don't have to re-walk the SVG. The
 // `otherBox` is fixed for the duration of the drag (only one component
@@ -658,6 +851,57 @@ interface ConnectedEdge {
   badgeText: SVGTextElement | null;
 }
 
+function relocateGroup(group: Element, x: number, y: number, w: number, h: number): void {
+  const isContainer = group.getAttribute('data-container') === '1';
+
+  const rect = group.querySelector('rect');
+  if (rect) {
+    rect.setAttribute('x', String(x));
+    rect.setAttribute('y', String(y));
+  }
+
+  const ellipses = group.querySelectorAll('ellipse');
+  if (ellipses.length === 2) {
+    const rx = Number(ellipses[0].getAttribute('rx') ?? w / 2);
+    const ry = Number(ellipses[0].getAttribute('ry') ?? 8);
+    ellipses[0].setAttribute('cx', String(x + rx));
+    ellipses[0].setAttribute('cy', String(y + ry));
+    ellipses[1].setAttribute('cx', String(x + rx));
+    ellipses[1].setAttribute('cy', String(y + h - ry));
+  } else if (ellipses.length === 1) {
+    const rx = Number(ellipses[0].getAttribute('rx') ?? 0);
+    ellipses[0].setAttribute('cx', String(x + rx));
+    ellipses[0].setAttribute('cy', String(y + 8));
+  }
+
+  const path = group.querySelector('path');
+  if (path && ellipses.length === 2) {
+    const rx = Number(ellipses[0].getAttribute('rx') ?? w / 2);
+    const ry = Number(ellipses[0].getAttribute('ry') ?? 8);
+    path.setAttribute('d',
+      `M${x},${y + ry} L${x},${y + h - ry} A${rx},${ry} 0 0 0 ${x + w},${y + h - ry} L${x + w},${y + ry}`);
+  } else if (path && ellipses.length === 0) {
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    path.setAttribute('d', `M${cx},${y} L${x + w},${cy} L${cx},${y + h} L${x},${cy} Z`);
+  }
+
+  const text = group.querySelector('text');
+  if (text) {
+    text.setAttribute('x', String(isContainer ? x + 12 : x + w / 2));
+    text.setAttribute('y', String(isContainer ? y - 6 : y + h / 2));
+  }
+
+  // Staleness dot — same offset constants as the renderer at
+  // src/diagram/render.ts:drawBox. Without this, drag leaves the dot
+  // behind at its original (cx, cy). See chaos test C15.
+  const dot = group.querySelector('.pv-staleness-dot') as SVGCircleElement | null;
+  if (dot) {
+    dot.setAttribute('cx', String(x + w - 10));
+    dot.setAttribute('cy', String(y + 10));
+  }
+}
+
 function readBox(group: Element): BoxRect | undefined {
   const rect = group.querySelector('rect');
   if (rect) {
@@ -668,16 +912,28 @@ function readBox(group: Element): BoxRect | undefined {
       h: Number(rect.getAttribute('height') ?? 0),
     };
   }
-  const ellipse = group.querySelector('ellipse');
-  if (ellipse) {
-    const cx = Number(ellipse.getAttribute('cx') ?? 0);
-    const cy = Number(ellipse.getAttribute('cy') ?? 0);
-    const rx = Number(ellipse.getAttribute('rx') ?? 0);
-    const path = group.querySelector('path');
-    const pd = path?.getAttribute('d') ?? '';
-    const m = /L\d+,(\d+)/.exec(pd);
-    const h = m ? Number(m[1]) - cy + 8 : 80;
-    return { x: cx - rx, y: cy - 8, w: rx * 2, h };
+  const ellipses = group.querySelectorAll('ellipse');
+  if (ellipses.length === 2) {
+    const rx = Number(ellipses[0].getAttribute('rx') ?? 0);
+    const ry = Number(ellipses[0].getAttribute('ry') ?? 8);
+    const topCy = Number(ellipses[0].getAttribute('cy') ?? 0);
+    const botCy = Number(ellipses[1].getAttribute('cy') ?? 0);
+    const cx = Number(ellipses[0].getAttribute('cx') ?? 0);
+    return { x: cx - rx, y: topCy - ry, w: rx * 2, h: botCy - topCy + 2 * ry };
+  }
+  if (ellipses.length === 1) {
+    const cx = Number(ellipses[0].getAttribute('cx') ?? 0);
+    const cy = Number(ellipses[0].getAttribute('cy') ?? 0);
+    const rx = Number(ellipses[0].getAttribute('rx') ?? 0);
+    return { x: cx - rx, y: cy - 8, w: rx * 2, h: 80 };
+  }
+  // Path-only shapes (diamond and any future polygonal kind). getBBox()
+  // returns the SVG-local bounding rect — same coordinate system as the
+  // rect/ellipse branches above, so connected-edge geometry stays consistent.
+  const path = group.querySelector('path');
+  if (path && typeof (path as SVGGraphicsElement).getBBox === 'function') {
+    const bb = (path as SVGGraphicsElement).getBBox();
+    return { x: bb.x, y: bb.y, w: bb.width, h: bb.height };
   }
   return undefined;
 }
@@ -687,8 +943,8 @@ function readBox(group: Element): BoxRect | undefined {
 // other end's box. Edges are repositioned per-frame via updateConnectedEdge.
 function findConnectedEdges(svgEl: SVGSVGElement, id: string): ConnectedEdge[] {
   const result: ConnectedEdge[] = [];
-  const groups = svgEl.querySelectorAll('[data-relationship-group]');
-  groups.forEach((g) => {
+  select(svgEl).selectAll<SVGGElement, unknown>('[data-relationship-group]').each(function() {
+    const g = this;
     const from = g.getAttribute('data-from');
     const to = g.getAttribute('data-to');
     if (from !== id && to !== id) return;
@@ -698,15 +954,16 @@ function findConnectedEdges(svgEl: SVGSVGElement, id: string): ConnectedEdge[] {
     if (!otherGroup) return;
     const otherBox = readBox(otherGroup);
     if (!otherBox) return;
-    const path = g.querySelector('path.pv-edge-line') as SVGPathElement | null;
+    const s = select(g);
+    const path = s.select<SVGPathElement>('path.pv-edge-line').node();
     if (!path) return;
     result.push({
       endIsFrom: from === id,
       otherBox,
       path,
-      label: g.querySelector('text.pv-edge-label'),
-      badgeBg: g.querySelector('circle.pv-edge-badge-bg'),
-      badgeText: g.querySelector('text.pv-edge-badge-text'),
+      label: s.select<SVGTextElement>('text.pv-edge-label').node(),
+      badgeBg: s.select<SVGCircleElement>('circle.pv-edge-badge-bg').node(),
+      badgeText: s.select<SVGTextElement>('text.pv-edge-badge-text').node(),
     });
   });
   return result;
@@ -733,117 +990,108 @@ function updateConnectedEdge(edge: ConnectedEdge, draggingBox: BoxRect): void {
 }
 
 function wireDrag(svgEl: SVGSVGElement): void {
-  dragDisposables?.dispose();
-  const d = new Disposables();
-  dragDisposables = d;
+  interface ChildSnapshot { group: SVGGElement; box: BoxRect; edges: ConnectedEdge[] }
+  interface DragSubject { x: number; y: number; w: number; h: number; id: string; edges: ConnectedEdge[]; traceId: string; children: ChildSnapshot[] }
 
-  let dragging:
-    | {
-        id: string;
-        group: SVGGElement;
-        startX: number;
-        startY: number;
-        initX: number;
-        initY: number;
-        w: number;
-        h: number;
-        dx: number;
-        dy: number;
-        traceId: string;
-        edges: ConnectedEdge[];
+  const behavior = d3Drag<SVGGElement, unknown>()
+    .filter(function(event) {
+      if (mode !== 'edit') return false;
+      if (event.button !== 0) return false;
+      return true;
+    })
+    .subject(function(): DragSubject | null {
+      const box = readBox(this);
+      if (!box) return null;
+      const id = this.getAttribute('data-component-id')!;
+      // Issue #3: collect ALL descendants, not just direct children, so that
+      // dragging a container moves deeply-nested grandchildren live too.
+      const children: ChildSnapshot[] = [];
+      if (currentDiagram) {
+        const descendants = collectDescendants(currentDiagram.components, id);
+        for (const cid of descendants) {
+          const g = svgEl.querySelector(`[data-component-id="${cid}"]`) as SVGGElement | null;
+          if (!g) continue;
+          const cb = readBox(g);
+          if (cb) children.push({ group: g, box: cb, edges: findConnectedEdges(svgEl, cid) });
+        }
       }
-    | undefined;
+      return { ...box, id, edges: findConnectedEdges(svgEl, id), traceId: newTraceId(), children };
+    })
+    .on('start', function(event) {
+      const s = event.subject as DragSubject;
+      this.style.cursor = 'grabbing';
+      event.sourceEvent.stopPropagation();
+      if (__DEBUG__) {
+        recorder.emit('webview', 'drag-start', {
+          id: s.id, initBox: { x: s.x, y: s.y, w: s.w, h: s.h }, zoom: currentTransform.k,
+        }, s.traceId);
+      }
+    })
+    .on('drag', function(event) {
+      const s = event.subject as DragSubject;
+      const dx = event.x - s.x;
+      const dy = event.y - s.y;
+      const t = `translate(${dx},${dy})`;
+      select(this).attr('transform', t);
+      if (s.edges.length) {
+        const draggingBox: BoxRect = { x: event.x, y: event.y, w: s.w, h: s.h };
+        for (const edge of s.edges) updateConnectedEdge(edge, draggingBox);
+      }
+      for (const child of s.children) {
+        child.group.setAttribute('transform', t);
+        if (child.edges.length) {
+          const childBox: BoxRect = { x: child.box.x + dx, y: child.box.y + dy, w: child.box.w, h: child.box.h };
+          for (const edge of child.edges) updateConnectedEdge(edge, childBox);
+        }
+      }
+    })
+    .on('end', function(event) {
+      const s = event.subject as DragSubject;
+      this.style.cursor = '';
+      const dx = event.x - s.x;
+      const dy = event.y - s.y;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+        select(this).attr('transform', null);
+        for (const child of s.children) child.group.removeAttribute('transform');
+        if (__DEBUG__) recorder.emit('webview', 'drag-cancel', { id: s.id, dx, dy }, s.traceId);
+        return;
+      }
+      const x = event.x;
+      const y = event.y;
+      select(this).attr('transform', null);
+      relocateGroup(this, x, y, s.w, s.h);
+      for (const child of s.children) {
+        child.group.removeAttribute('transform');
+        relocateGroup(child.group, child.box.x + dx, child.box.y + dy, child.box.w, child.box.h);
+      }
+      // Issue #2 fix: if this is a nested component, compute its position
+      // relative to its parent's CURRENT rendered box and post that
+      // directly. Previously the host tried to convert absolute→relative
+      // by reading the parent's saved layout entry, but if the parent
+      // wasn't pinned yet, the conversion was skipped and the child's
+      // absolute coords were stored as if they were parent-relative.
+      let pinX = x;
+      let pinY = y;
+      let parentRelative = false;
+      const parentId = currentDiagram?.components[s.id]?.parent;
+      if (parentId) {
+        const parentG = svgEl.querySelector(`[data-component-id="${parentId}"]`) as SVGGElement | null;
+        const parentBox = parentG ? readBox(parentG) : null;
+        if (parentBox) {
+          pinX = x - parentBox.x;
+          pinY = y - parentBox.y;
+          parentRelative = true;
+        }
+      }
+      if (__DEBUG__) {
+        recorder.emit('webview', 'drag-end', {
+          id: s.id, dx, dy, posted: { x: pinX, y: pinY, w: s.w, h: s.h }, parentRelative, zoom: currentTransform.k,
+        }, s.traceId);
+      }
+      vscode.postMessage({ type: 'pin', id: s.id, x: pinX, y: pinY, w: s.w, h: s.h, parentRelative, traceId: s.traceId });
+    });
 
-  d.on(svgEl, 'mousedown', (ev) => {
-    const e = ev as MouseEvent;
-    if (mode !== 'edit') return;
-    const target = e.target as Element | null;
-    const group = target?.closest('[data-component-id]') as SVGGElement | null;
-    if (!group) return;
-    const id = group.getAttribute('data-component-id')!;
-    const box = readBox(group);
-    if (!box) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const traceId = newTraceId();
-    dragging = {
-      id,
-      group,
-      startX: e.clientX,
-      startY: e.clientY,
-      initX: box.x,
-      initY: box.y,
-      w: box.w,
-      h: box.h,
-      dx: 0,
-      dy: 0,
-      traceId,
-      // Snapshot every edge connected to this box once at drag-start —
-      // they're updated in place per mousemove. Cheap: an architecture
-      // diagram has dozens of edges total, the connected subset is tiny.
-      edges: findConnectedEdges(svgEl, id),
-    };
-    group.style.cursor = 'grabbing';
-    if (__DEBUG__) {
-      recorder.emit(
-        'webview',
-        'drag-start',
-        {
-          id,
-          clientX: e.clientX,
-          clientY: e.clientY,
-          initBox: { ...box },
-          zoom: panZoom?.getZoom() ?? 1,
-        },
-        traceId,
-      );
-    }
-  });
-
-  d.on(window, 'mousemove', (ev) => {
-    const e = ev as MouseEvent;
-    if (!dragging) return;
-    const zoom = panZoom?.getZoom() ?? 1;
-    dragging.dx = (e.clientX - dragging.startX) / zoom;
-    dragging.dy = (e.clientY - dragging.startY) / zoom;
-    dragging.group.setAttribute('transform', `translate(${dragging.dx} ${dragging.dy})`);
-    // Recompute every connected edge's geometry so they stay attached to
-    // the moving box. Same math the renderer uses, so the in-flight
-    // shape matches what the next full render produces — no visible
-    // snap when the drag finishes.
-    if (dragging.edges.length) {
-      const draggingBox: BoxRect = {
-        x: dragging.initX + dragging.dx,
-        y: dragging.initY + dragging.dy,
-        w: dragging.w,
-        h: dragging.h,
-      };
-      for (const edge of dragging.edges) updateConnectedEdge(edge, draggingBox);
-    }
-  });
-
-  d.on(window, 'mouseup', () => {
-    if (!dragging) return;
-    const { id, dx, dy, group, initX, initY, w, h, traceId } = dragging;
-    group.style.cursor = '';
-    dragging = undefined;
-    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
-      group.removeAttribute('transform');
-      if (__DEBUG__) recorder.emit('webview', 'drag-cancel', { id, dx, dy }, traceId);
-      return;
-    }
-    const x = initX + dx;
-    const y = initY + dy;
-    if (__DEBUG__) {
-      recorder.emit(
-        'webview',
-        'drag-end',
-        { id, dx, dy, posted: { x, y, w, h }, zoom: panZoom?.getZoom() ?? 1 },
-        traceId,
-      );
-    }
-    vscode.postMessage({ type: 'pin', id, x, y, w, h, traceId });
-  });
+  select(svgEl).selectAll<SVGGElement, unknown>('[data-component-id]').call(behavior);
 }
 
 function newTraceId(): string {
@@ -857,9 +1105,13 @@ function newTraceId(): string {
 window.addEventListener('message', (e) => {
   const msg = e.data;
   if (!msg || typeof msg !== 'object') return;
+  // Every host → webview message carries the model-picker state, so
+  // refreshing it here keeps it in sync regardless of which branch runs.
+  updateModelPicker(msg.activeModel, msg.availableModels);
   switch (msg.type) {
     case 'svg':
       currentDiagram = (msg.diagram as CachedDiagram) ?? null;
+      currentActivity = (msg.activity as typeof currentActivity) ?? {};
       showSvg(msg.svg, msg.traceId);
       showDiagnostics(msg.diagnostics ?? []);
       showLegend(currentDiagram?.rules);
@@ -868,13 +1120,15 @@ window.addEventListener('message', (e) => {
     case 'error':
       showEmpty(msg.message);
       break;
+    case 'session_connected':
+      break;
   }
 });
 
-window.addEventListener('resize', () => {
-  panZoom?.resize();
-  panZoom?.fit();
-  panZoom?.center();
-});
+// No resize handler: the SVG has width/height = 100% so it resizes with its
+// container automatically, and d3-zoom preserves the user's transform across
+// DOM resizes. A previous version of this code force-refit on every resize,
+// which clobbered the user's zoom whenever VS Code resized the panel
+// (audit panel opening, editor split, etc) — that was issue #6.
 
 vscode.postMessage({ type: 'ready' });

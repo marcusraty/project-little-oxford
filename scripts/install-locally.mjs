@@ -17,7 +17,8 @@ import { execSync } from 'node:child_process';
 
 const root = process.cwd();
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-const vsixPath = path.join(root, 'project-viewer.vsix');
+const vsixPath = path.join(root, 'little-oxford.vsix');
+const debug = process.argv.includes('--debug');
 
 // Clean up any leftover symlink from the previous install method —
 // otherwise VS Code would load TWO copies of the extension (the symlink
@@ -29,13 +30,28 @@ if (stat?.isSymbolicLink()) {
   console.log(`Removed legacy symlink at ${oldLink}`);
 }
 
-console.log('1/3 building…');
-execSync('npm run build', { stdio: 'inherit', cwd: root });
+const buildCmd = debug ? 'npm run build:debug' : 'npm run build';
+console.log(`1/3 building${debug ? ' (debug)' : ''}…`);
+execSync(buildCmd, { stdio: 'inherit', cwd: root });
 
 console.log('2/3 packaging vsix…');
-execSync(`npx vsce package --out ${JSON.stringify(vsixPath)}`, { stdio: 'inherit', cwd: root });
+if (debug) {
+  const pkgPath = path.join(root, 'package.json');
+  const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  const savedPrepublish = pkgJson.scripts['vscode:prepublish'];
+  delete pkgJson.scripts['vscode:prepublish'];
+  fs.writeFileSync(pkgPath, JSON.stringify(pkgJson, null, 2) + '\n', 'utf8');
+  try {
+    execSync(`npx vsce package --out ${JSON.stringify(vsixPath)}`, { stdio: 'inherit', cwd: root });
+  } finally {
+    pkgJson.scripts['vscode:prepublish'] = savedPrepublish;
+    fs.writeFileSync(pkgPath, JSON.stringify(pkgJson, null, 2) + '\n', 'utf8');
+  }
+} else {
+  execSync(`npx vsce package --out ${JSON.stringify(vsixPath)}`, { stdio: 'inherit', cwd: root });
+}
 
 console.log('3/3 installing into VS Code…');
 execSync(`code --install-extension ${JSON.stringify(vsixPath)} --force`, { stdio: 'inherit', cwd: root });
 
-console.log(`\nInstalled. Reload VS Code: Ctrl/Cmd+Shift+P → "Developer: Reload Window"`);
+console.log('\nInstalled. Reload VS Code: Ctrl/Cmd+Shift+P → "Developer: Reload Window"');

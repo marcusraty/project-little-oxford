@@ -1,0 +1,149 @@
+{
+  "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"60 60 1200 530\" width=\"1200\" height=\"530\" font-family=\"ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif\"><defs><marker id=\"arrow\" markerWidth=\"10\" markerHeight=\"8\" refX=\"9\" refY=\"4\" orient=\"auto-start-reverse\" markerUnits=\"userSpaceOnUse\"><path d=\"M0,0 L10,4 L0,8 z\" fill=\"context-stroke\"/></marker></defs><g data-component-id=\"backend\" data-container=\"1\"><rect x=\"100\" y=\"300\" width=\"500\" height=\"250\" rx=\"10\" class=\"pv-container-fill pv-container-stroke\" stroke-width=\"1\" stroke-dasharray=\"6 4\"/><text x=\"112\" y=\"294\" font-size=\"11\" class=\"pv-container-label\">Backend Services</text></g><g data-component-id=\"web_server\"><rect x=\"100\" y=\"100\" width=\"220\" height=\"80\" rx=\"8\" stroke=\"#38bdf8\" class=\"pv-default-fill\" stroke-width=\"1.5\"/><text x=\"210\" y=\"140\" font-size=\"13\" font-weight=\"600\" class=\"pv-title\" text-anchor=\"middle\" dominant-baseline=\"central\">Web Server</text></g><g data-component-id=\"api_gateway\"><rect x=\"400\" y=\"100\" width=\"220\" height=\"80\" rx=\"8\" stroke=\"#38bdf8\" class=\"pv-default-fill\" stroke-width=\"1.5\"/><text x=\"510\" y=\"140\" font-size=\"13\" font-weight=\"600\" class=\"pv-title\" text-anchor=\"middle\" dominant-baseline=\"central\">API Gateway</text></g><g data-component-id=\"auth_svc\"><rect x=\"140\" y=\"360\" width=\"220\" height=\"80\" rx=\"8\" stroke=\"#38bdf8\" class=\"pv-default-fill\" stroke-width=\"1.5\"/><text x=\"250\" y=\"400\" font-size=\"13\" font-weight=\"600\" class=\"pv-title\" text-anchor=\"middle\" dominant-baseline=\"central\">Auth Service</text></g><g data-component-id=\"user_svc\"><rect x=\"370\" y=\"360\" width=\"220\" height=\"80\" rx=\"8\" stroke=\"#38bdf8\" class=\"pv-default-fill\" stroke-width=\"1.5\"/><text x=\"480\" y=\"400\" font-size=\"13\" font-weight=\"600\" class=\"pv-title\" text-anchor=\"middle\" dominant-baseline=\"central\">User Service</text></g><g data-component-id=\"database\"><ellipse cx=\"810\" cy=\"408\" rx=\"110\" ry=\"8\" stroke=\"#2b6cb0\" class=\"pv-default-fill\" stroke-width=\"1.5\"/><path d=\"M700,408 L700,472 A110,8 0 0 0 920,472 L920,408\" stroke=\"#2b6cb0\" class=\"pv-default-fill\" stroke-width=\"1.5\"/><ellipse cx=\"810\" cy=\"472\" rx=\"110\" ry=\"8\" stroke=\"#2b6cb0\" class=\"pv-default-fill\" stroke-width=\"1.5\"/><text x=\"810\" y=\"440\" font-size=\"13\" font-weight=\"600\" class=\"pv-title\" text-anchor=\"middle\" dominant-baseline=\"central\">Database</text></g><g data-component-id=\"router\"><path d=\"M810,100 L920,140 L810,180 L700,140 Z\" stroke=\"#f59e0b\" class=\"pv-default-fill\" stroke-width=\"1.5\"/><text x=\"810\" y=\"140\" font-size=\"13\" font-weight=\"600\" class=\"pv-title\" text-anchor=\"middle\" dominant-baseline=\"central\">Router</text></g><g data-component-id=\"cache\"><rect x=\"1000\" y=\"100\" width=\"220\" height=\"80\" rx=\"8\" stroke=\"#38bdf8\" class=\"pv-default-fill\" stroke-width=\"1.5\"/><text x=\"1110\" y=\"140\" font-size=\"13\" font-weight=\"600\" class=\"pv-title\" text-anchor=\"middle\" dominant-baseline=\"central\">Cache</text></g><g data-relationship-group=\"web_to_api\" data-from=\"web_server\" data-to=\"api_gateway\"><path d=\"M320,140 L400,140\" fill=\"none\" class=\"pv-edge-line pv-default-arrow-stroke\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><text x=\"360\" y=\"128\" font-size=\"10\" class=\"pv-edge-label pv-default-arrow-fill\" text-anchor=\"middle\">http</text></g><g data-relationship-group=\"api_to_backend\" data-from=\"api_gateway\" data-to=\"backend\"><path d=\"M487.5438596491228,180 L420.17543859649123,300\" fill=\"none\" class=\"pv-edge-line pv-default-arrow-stroke\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><text x=\"464.3234545474328\" y=\"245.87441708049167\" font-size=\"10\" class=\"pv-edge-label pv-default-arrow-fill\" text-anchor=\"middle\">routes_to</text></g><g data-relationship-group=\"api_to_router\" data-from=\"api_gateway\" data-to=\"router\"><path d=\"M620,140 L700,140\" fill=\"none\" class=\"pv-edge-line pv-default-arrow-stroke\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><text x=\"660\" y=\"128\" font-size=\"10\" class=\"pv-edge-label pv-default-arrow-fill\" text-anchor=\"middle\">routes_to</text></g><g data-relationship-group=\"backend_to_db\" data-from=\"backend\" data-to=\"database\"><path d=\"M600,433.1521739130435 L700,436.4130434782609\" fill=\"none\" class=\"pv-edge-line pv-default-arrow-stroke\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><text x=\"650.3910964713465\" y=\"422.78898357435963\" font-size=\"10\" class=\"pv-edge-label pv-default-arrow-fill\" text-anchor=\"middle\">queries</text></g><g data-relationship-group=\"auth_to_db\" data-from=\"auth_svc\" data-to=\"database\"><path d=\"M360,407.85714285714283 L700,432.14285714285717\" fill=\"none\" class=\"pv-edge-line pv-default-arrow-stroke\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><text x=\"530.854964599855\" y=\"408.0304956020312\" font-size=\"10\" class=\"pv-edge-label pv-default-arrow-fill\" text-anchor=\"middle\">queries</text></g></svg>",
+  "diagram": {
+    "components": {
+      "web_server": {
+        "kind": "service",
+        "label": "Web Server",
+        "parent": null
+      },
+      "api_gateway": {
+        "kind": "service",
+        "label": "API Gateway",
+        "parent": null
+      },
+      "backend": {
+        "kind": "package",
+        "label": "Backend Services",
+        "parent": null
+      },
+      "auth_svc": {
+        "kind": "service",
+        "label": "Auth Service",
+        "parent": "backend"
+      },
+      "user_svc": {
+        "kind": "service",
+        "label": "User Service",
+        "parent": "backend"
+      },
+      "database": {
+        "kind": "storage",
+        "label": "Database",
+        "parent": null
+      },
+      "router": {
+        "kind": "gateway",
+        "label": "Router",
+        "parent": null
+      },
+      "cache": {
+        "kind": "service",
+        "label": "Cache",
+        "parent": null
+      }
+    },
+    "relationships": {
+      "web_to_api": {
+        "kind": "http",
+        "from": "web_server",
+        "to": "api_gateway"
+      },
+      "api_to_backend": {
+        "kind": "routes_to",
+        "from": "api_gateway",
+        "to": "backend"
+      },
+      "api_to_router": {
+        "kind": "routes_to",
+        "from": "api_gateway",
+        "to": "router"
+      },
+      "backend_to_db": {
+        "kind": "queries",
+        "from": "backend",
+        "to": "database"
+      },
+      "auth_to_db": {
+        "kind": "queries",
+        "from": "auth_svc",
+        "to": "database"
+      }
+    },
+    "rules": {
+      "component_styles": {
+        "service": {
+          "symbol": "rectangle",
+          "color": "#38bdf8"
+        },
+        "package": {
+          "symbol": "rectangle",
+          "color": "#cbd5e1",
+          "border": "dashed"
+        },
+        "storage": {
+          "symbol": "cylinder",
+          "color": "#2b6cb0"
+        },
+        "gateway": {
+          "symbol": "diamond",
+          "color": "#f59e0b"
+        }
+      }
+    },
+    "overrides": {},
+    "layout": {
+      "components": {
+        "web_server": {
+          "x": 100,
+          "y": 100,
+          "w": 220,
+          "h": 80
+        },
+        "api_gateway": {
+          "x": 400,
+          "y": 100,
+          "w": 220,
+          "h": 80
+        },
+        "backend": {
+          "x": 100,
+          "y": 300,
+          "w": 500,
+          "h": 250
+        },
+        "auth_svc": {
+          "x": 40,
+          "y": 60,
+          "w": 220,
+          "h": 80
+        },
+        "user_svc": {
+          "x": 270,
+          "y": 60,
+          "w": 220,
+          "h": 80
+        },
+        "database": {
+          "x": 700,
+          "y": 400,
+          "w": 220,
+          "h": 80
+        },
+        "router": {
+          "x": 700,
+          "y": 100,
+          "w": 220,
+          "h": 80
+        },
+        "cache": {
+          "x": 1000,
+          "y": 100,
+          "w": 220,
+          "h": 80
+        }
+      }
+    }
+  },
+  "diagnostics": []
+}

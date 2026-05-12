@@ -1,4 +1,4 @@
-// Project Viewer — render-pipeline replay tool.
+// Oxford — render-pipeline replay tool.
 //
 // Reads a model.json off disk and walks the layout pipeline one step at a
 // time, dumping the intermediates to stdout. This is the diagnostic seam

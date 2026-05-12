@@ -1,6 +1,6 @@
 # Bootstrap: authoring a model.json
 
-You are an agent helping a developer build an architecture diagram of their codebase. Your output is one JSON file: `.viewer/model.json` in the user's workspace. A renderer reads it and produces the diagram.
+You are an agent helping a developer build an architecture diagram of their codebase. Your output is one JSON file: `.oxford/model.json` in the user's workspace. A renderer reads it and produces the diagram.
 
 The JSON is the source of truth. The diagram is purely derived. The user refines the diagram in conversation; you rewrite the JSON; the diagram refreshes.
 
@@ -55,7 +55,7 @@ One file. Five blocks.
 | `relationships` | Connections. **First-class records with their own stable IDs** — not derived from `from+to`, so renames don't orphan history. Rich metadata. | Yes |
 | `rules` | Declarative styling by `kind`. Components carry a shape (rectangle / cylinder), a color, optional dashed border. Relationships only carry an optional `style: "dashed"` — all edges render in a single neutral color regardless of kind. | Yes — define a style for every component kind you use |
 | `overrides` | Reserved for future per-instance user intent. Currently unused. | **Leave as `{}`** |
-| `layout` | Persisted node positions. Tool-managed (renderer + drag-to-pin). | **Leave as `{}`** |
+| `layout` | Persisted node positions. Stored in `.oxford/layout.json`, not model.json. | **Do not include** |
 | `_notes` | One short prose line flagging anything uncertain. | Yes |
 
 ### Stable IDs
@@ -66,7 +66,7 @@ Object keys are the IDs — snake_case, short, semantic. Pick a name that captur
 
 Fetch the canonical type definitions from:
 
-<https://github.com/marcusraty/project-little-oxford/blob/main/src/diagram/types.ts>
+<https://github.com/marcusraty/little-oxford/blob/main/src/diagram/types.ts>
 
 The example above is illustrative; the file at that URL is the source of truth. The shape is intentionally loose — `kind` is any string, `anchors[].type` is any string, no `additionalProperties: false` anywhere. Preserve unknown fields when round-tripping.
 
@@ -171,10 +171,10 @@ You know how to explore a codebase — pick whatever path makes sense. Three thi
 
 ## 9. Conversation rules
 
-You're working IN the user's editor. The diagram panel is open, watching `.viewer/model.json`. Every time you write that file, the diagram refreshes live. Use this.
+You're working IN the user's editor. The diagram panel is open, watching `.oxford/model.json`. Every time you write that file, the diagram refreshes live. Use this.
 
 - Start reading immediately. Don't open with a greeting; don't ask for extra context up front. The user will redirect you if you go off-track.
-- **Write to `.viewer/model.json` early and often.** After your first pass — even if it's just 2–3 components — write the file. As you discover more, rewrite it. The user watches the diagram fill in live; this is how they follow along. Do NOT explore in private and present at the end.
+- **Write to `.oxford/model.json` early and often.** After your first pass — even if it's just 2–3 components — write the file. As you discover more, rewrite it. The user watches the diagram fill in live; this is how they follow along. Do NOT explore in private and present at the end.
 - **Keep every write valid.** The renderer fails closed on broken JSON or schema violations; an invalid intermediate write blanks the diagram for the user. Better to ship a small-but-correct model than a large-but-broken one.
 - Narrate sparsely. The user sees both your tool calls AND the live-updating diagram, so you don't need to announce every file you read or every box you add. DO speak up at moments of genuine ambiguity (e.g. two pieces of code that could be one component or two) rather than guessing silently.
 - Prefer deciding over asking. If the answer is obvious or low-stakes, make a call and flag it in `_notes`. Only ask when the answer would meaningfully change the model.
@@ -185,7 +185,7 @@ You're working IN the user's editor. The diagram panel is open, watching `.viewe
 
 ## 10. Output
 
-Write your model to `.viewer/model.json`. Write directly, and write often (see §9). Each write fully replaces the file; the renderer's watcher picks up the change immediately and refreshes the diagram in the user's panel.
+Write your model to `.oxford/model.json`. Write directly, and write often (see §9). Each write fully replaces the file; the renderer's watcher picks up the change immediately and refreshes the diagram in the user's panel.
 
 Use IDs, kinds, and labels that match the real codebase. The shape is defined in §1; the authoritative type definitions are at the GitHub URL in that section.
 
@@ -216,7 +216,7 @@ Orphan layout/override entries are auto-cleaned on the next write — you don't 
 
 Implementation reference (rules + thresholds):
 
-<https://github.com/marcusraty/project-little-oxford/blob/main/src/diagram/render.ts>
+<https://github.com/marcusraty/little-oxford/blob/main/src/diagram/render.ts>
 
 ---
 
@@ -226,6 +226,6 @@ Implementation reference (rules + thresholds):
 - **No closed relationship vocabulary.** Strings; rules grow with use.
 - **No static analysis / import graphs.** You read code; mechanical parsers produce noise.
 - **No per-component documentation files.** Everything in one `model.json`.
-- **No positions in `overrides`.** Positions live in `layout` and are tool-managed — leave `layout: {}`.
+- **No `layout` field in model.json.** Layout positions are stored in `.oxford/layout.json` and are tool-managed. Do not include a `layout` key when writing model.json.
 - **No per-instance `overrides`.** The block isn't read by the current renderer — leave `overrides: {}`.
 - **Don't reject unknown fields.** When round-tripping a model, preserve fields you don't recognize.

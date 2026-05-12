@@ -1,4 +1,4 @@
-// Project Viewer — small helper that bundles event-listener attachments
+// little-oxford — small helper that bundles event-listener attachments
 // so they can be removed as a group.
 //
 // Used by webview.ts to make `wireDrag` re-entrant: each render replaces

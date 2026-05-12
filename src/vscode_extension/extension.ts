@@ -1,80 +1,101 @@
-// Project Viewer — VS Code extension entry point.
+// little-oxford — VS Code extension entry point.
 //
-// What's running where:
-//   - This file runs in the **extension host** — a Node.js process VS Code
-//     spawns when our extension activates. It has full Node APIs (fs, path).
-//   - The diagram is drawn by a **webview** — a sandboxed Chromium iframe
-//     inside an editor tab. Its source is webview.ts, compiled to
-//     dist/webview.js by esbuild.
-//   - These run in different processes and can't share JS objects. They
-//     talk by passing JSON-serializable messages (`postMessage`).
-//
-// File layout (this folder):
-//   extension.ts    activate() / deactivate() lifecycle hooks (this file)
-//   panel.ts        webview panel: HTML shell, IPC, rerender, drag-pin
-//   statusbar.ts    the bottom-right pill
-//   watcher.ts      fs watcher on .viewer/model.json
-//   webview.ts      browser-side code (drag, click, SVG injection)
-//
-// activate() runs once, when VS Code decides to load us. We asked for that
-// to happen on startup via `activationEvents: ["onStartupFinished"]` in
-// package.json. `context.subscriptions` is a cleanup list — anything we
-// `push` here gets disposed automatically when the extension is unloaded.
+// Orchestration only. State lives in ExtensionState; commands in commands.ts;
+// audit pipeline in audit_setup.ts; model watcher in model_watcher_setup.ts.
 
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import { diagramExists, ensureDiagramDir } from '../diagram/storage';
-import { disposePanel, showPanel, watchConfigurationChanges } from './panel';
+import { ensureDiagramDir } from '../diagram/storage';
+import { disposePanel, showPanel } from './panel';
 import { createStatusBar } from './statusbar';
-import { disposeWatcher } from './watcher';
 import { installRecorder, uninstallRecorder } from '../diagnostics';
 import { fileSink } from '../diagnostics/sinks/file_sink';
+import { outputSink } from '../diagnostics/sinks/output_sink';
+import { isMonitorRunning } from './monitor';
+import { RuleEditorProvider } from './rule_editor';
+import { MONITOR_HEARTBEAT_POLL_MS } from './timing';
+import type { AuditEngine } from './audit_engine';
+import { ExtensionState } from './extension_state';
+import { registerCommands, registerAuditViewCommands } from './commands';
+import { setupAuditPipeline } from './audit_setup';
+import { setupModelWatcher } from './model_watcher_setup';
+
+let extState: ExtensionState | undefined;
+
+// Test/integration access — the audit engine for assertions or other hooks.
+export function getAuditEngine(): AuditEngine | undefined {
+  return extState?.auditEngine;
+}
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  // Diagnostics: only wired in debug builds. The `__DEBUG__` constant is
-  // injected by esbuild and folds to `false` in prod, so the dynamic
-  // imports inside this branch and their transitive deps (file sink,
-  // RealRecorder) become tree-shakeable.
+  const state = new ExtensionState();
+  extState = state;
+
+  const channel = vscode.window.createOutputChannel('little-oxford');
+  context.subscriptions.push(channel);
+  state.setOutputChannel(channel);
+  state.log('Extension activating...');
+
   if (__DEBUG__) {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (root) {
       const r = installRecorder();
-      r.use(fileSink(path.join(root, '.viewer/in-progress/drag.log')));
-      r.emit('host', 'extension-activated', { root });
+      r.use(fileSink(path.join(root, '.oxford/debug.log')));
+      r.use(outputSink(state.log));
+      r.emit('host', 'extension-activate', { root });
     }
   }
 
-  // Register a command. Commands are named handlers (here, "projectViewer.show")
-  // that the user can invoke from the Command Palette, a keybinding, or
-  // — as we wire up below — by clicking the status bar item.
+  // Custom rule editor
   context.subscriptions.push(
-    vscode.commands.registerCommand('projectViewer.show', () => showPanel(context)),
+    vscode.window.registerCustomEditorProvider(
+      RuleEditorProvider.viewType,
+      new RuleEditorProvider(),
+      { supportsMultipleEditorsPerDocument: false },
+    ),
   );
 
-  // Re-render when the user toggles the layout preset (or any other
-  // projectViewer.* setting later). Push the disposable into
-  // context.subscriptions so VS Code unhooks it on deactivate.
-  context.subscriptions.push(watchConfigurationChanges());
-
+  registerCommands(context, state);
   createStatusBar(context);
 
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (root) {
-    await ensureDiagramDir(root);
-    // If a diagram already exists in this workspace, auto-open it on
-    // load so the user doesn't have to click anything.
-    if (await diagramExists(root)) {
-      showPanel(context);
-    }
+  if (!root) {
+    state.log('No workspace folder open');
+    return;
   }
+
+  await ensureDiagramDir(root);
+  await setupAuditPipeline(context, root, state);
+  registerAuditViewCommands(context, state);
+  await setupModelWatcher(context, root, state);
+
+  // One-time relocation of the audit view to the bottom panel.
+  // Fire-and-forget — must NOT block activation (focus can hang waiting
+  // for the view to render). Surface failures via the log instead of
+  // letting executeCommand reject silently.
+  if (!context.globalState.get('auditViewMoved')) {
+    Promise.resolve(vscode.commands.executeCommand('little-oxford.audit.focus'))
+      .then(() => vscode.commands.executeCommand('workbench.action.moveView', { viewId: 'little-oxford.audit', destination: 'workbench.panel.output' }))
+      .then(() => context.globalState.update('auditViewMoved', true))
+      .then(undefined, (e) => state.log(`Audit view relocation failed: ${(e as Error)?.message ?? e}`));
+  }
+
+  showPanel(context);
+
+  // Heartbeat polling: monitor.sh writes a heartbeat file every 2s; we
+  // poll at 3s so a single missed write still reads as connected.
+  const heartbeatInterval = setInterval(async () => {
+    const running = await isMonitorRunning(root);
+    state.auditView?.updateMonitorStatus(running);
+  }, MONITOR_HEARTBEAT_POLL_MS);
+  context.subscriptions.push({ dispose: () => clearInterval(heartbeatInterval) });
+
+  state.log(`Extension activated for workspace: ${root}`);
 }
 
-// deactivate() is the counterpart to activate(). VS Code calls it when the
-// extension is unloaded (usually only when VS Code is shutting down or the
-// extension is reinstalled). Anything we registered via `context.subscriptions`
-// is auto-disposed; we just clean up things we manage manually.
 export function deactivate(): void {
-  disposeWatcher();
+  extState?.dispose();
+  extState = undefined;
   disposePanel();
   if (__DEBUG__) uninstallRecorder();
 }

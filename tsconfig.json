@@ -11,5 +11,6 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src/**/*", "scripts/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*", "scripts/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["tests/vscode-e2e/**/*"]
 }

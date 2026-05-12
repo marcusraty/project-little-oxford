@@ -1,0 +1,28 @@
+{
+  "components": {
+    "server": {
+      "kind": "module",
+      "label": "Server",
+      "parent": null,
+      "anchors": [{ "type": "file", "value": "src/server.ts" }]
+    },
+    "client": {
+      "kind": "module",
+      "label": "Client",
+      "parent": null,
+      "anchors": [{ "type": "file", "value": "src/client.ts" }]
+    }
+  },
+  "relationships": {
+    "client_calls_server": {
+      "kind": "calls",
+      "from": "client",
+      "to": "server"
+    }
+  },
+  "rules": {
+    "component_styles": {
+      "module": { "symbol": "rectangle", "color": "#0ea5e9" }
+    }
+  }
+}

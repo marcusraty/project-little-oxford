@@ -1,4 +1,4 @@
-// Project Viewer — pluggable layout strategies.
+// little-oxford — pluggable layout strategies.
 //
 // The diagram engine supports multiple layout "presets" — opinionated
 // bundles of ELK options + post-processing. Each preset captures a

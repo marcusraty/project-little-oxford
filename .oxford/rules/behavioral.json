@@ -1,0 +1,84 @@
+{
+  "rules": [
+    {
+      "id": "F4",
+      "name": "Shortcut language",
+      "kinds": ["text", "thinking"],
+      "pattern": "just wire|bolt on|easy path|already works|path of least|good enough",
+      "hook": "Stop",
+      "message": "Shortcut language detected. Are you taking the easy path instead of the right one?",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "F5",
+      "name": "Self-reassurance",
+      "kinds": ["text", "thinking"],
+      "pattern": "so that.s fine|still works|already checks",
+      "hook": "Stop",
+      "message": "Self-reassurance detected. Verify instead of assuming.",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "F7",
+      "name": "Assumed-ok",
+      "kinds": ["text", "thinking"],
+      "pattern": "should still pass|should be fine|should work",
+      "hook": "Stop",
+      "message": "You assumed something works without verifying. Run the tests.",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "F8",
+      "name": "Thinking reassurance",
+      "kinds": ["thinking"],
+      "pattern": "that.s fine|good enough|close enough",
+      "hook": "Stop",
+      "message": "Internal reassurance detected. Is this really fine?",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "F9",
+      "name": "Manual test only",
+      "kinds": ["text", "thinking"],
+      "pattern": "manual.*test|test.*manual|manual.*verif",
+      "hook": "Stop",
+      "message": "You declared manual testing only. Write an automated test.",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "F10",
+      "name": "Untestable claim",
+      "kinds": ["text", "thinking"],
+      "pattern": "not directly testable|can.t.*test|harder to test|browser context.*test",
+      "hook": "Stop",
+      "message": "You claimed something is untestable. Is that really true? Consider integration or e2e tests.",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "F11",
+      "name": "Test-free implementation",
+      "kinds": ["text", "thinking"],
+      "pattern": "skip the test|skip the tests|skip writing\\s+(the|a)\\s+test|skip(ping)? tests for now|\\btests? later\\b|\\btest it later\\b|\\bwrite tests? after\\b|\\badd (a )?tests? after\\b|\\btests? can wait\\b|implement first, then test|\\bimplement(ed)? without (a )?tests?\\b",
+      "hook": "Stop",
+      "message": "You are planning to implement before testing. Write the failing test FIRST.",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "F12",
+      "name": "Context anxiety",
+      "kinds": ["text", "thinking"],
+      "pattern": "running low on context|save.*for next session|been going.*long time|call it a session|wrap up|running out of context",
+      "hook": "Stop",
+      "message": "The user is monitoring context usage and will tell you when to stop. Keep going.",
+      "action": "hook",
+      "severity": "warning"
+    }
+  ]
+}

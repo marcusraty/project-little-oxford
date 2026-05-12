@@ -1,0 +1,132 @@
+{
+  "rules": [
+    {
+      "id": "C1",
+      "name": "Schema change without test",
+      "kinds": [
+        "tool_use"
+      ],
+      "trigger": "src/diagram/types.ts",
+      "companions": [
+        "tests/render.test.ts",
+        "tests/storage.test.ts"
+      ],
+      "any": true,
+      "hook": "Stop",
+      "message": "You edited types.ts but didn't update any test file. Write a failing test first.",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "C2",
+      "name": "Renderer change without test",
+      "kinds": [
+        "tool_use"
+      ],
+      "trigger": "src/diagram/render.ts",
+      "companions": [
+        "tests/render.test.ts"
+      ],
+      "hook": "Stop",
+      "message": "You edited render.ts but didn't update render.test.ts. Write a failing test first.",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "C4",
+      "name": "Type change without renderer update",
+      "kinds": [
+        "tool_use"
+      ],
+      "trigger": "src/diagram/types.ts",
+      "companions": [
+        "src/diagram/render.ts"
+      ],
+      "hook": "Stop",
+      "message": "You changed types.ts but didn't update render.ts. Are the types still in sync?",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "C5",
+      "name": "Renderer change without type definition",
+      "kinds": [
+        "tool_use"
+      ],
+      "trigger": "src/diagram/render.ts",
+      "companions": [
+        "src/diagram/types.ts"
+      ],
+      "hook": "Stop",
+      "message": "You changed render.ts but didn't update types.ts. Should the types change too?",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "C6",
+      "name": "Storage change without test",
+      "kinds": [
+        "tool_use"
+      ],
+      "trigger": "src/diagram/storage.ts",
+      "companions": [
+        "tests/storage.test.ts"
+      ],
+      "hook": "Stop",
+      "message": "You edited storage.ts but didn't update storage.test.ts. Write a failing test first.",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "C10",
+      "name": "Source before test",
+      "kinds": [
+        "tool_use"
+      ],
+      "trigger": "src/",
+      "companions": [
+        "tests/"
+      ],
+      "order": "companion_first",
+      "hook": "PreToolUse",
+      "message": "You edited source code before writing a test. Write a failing test first.",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "C11",
+      "name": "Activity change without activity test",
+      "kinds": ["tool_use"],
+      "trigger": "src/diagram/activity.ts",
+      "companions": ["tests/activity.test.ts"],
+      "hook": "Stop",
+      "message": "You edited activity.ts but didn't update activity.test.ts.",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "C12",
+      "name": "Webview change without e2e test",
+      "kinds": ["tool_use"],
+      "trigger": "src/vscode_extension/webview.ts",
+      "companions": ["tests/e2e/"],
+      "any": true,
+      "hook": "Stop",
+      "message": "You edited webview.ts but didn't update any e2e test.",
+      "action": "hook",
+      "severity": "warning"
+    },
+    {
+      "id": "C14",
+      "name": "Rule file change without rule test",
+      "kinds": ["tool_use"],
+      "trigger": ".oxford/rules/",
+      "companions": ["tests/rules.test.ts"],
+      "any": true,
+      "hook": "Stop",
+      "message": "You changed a rule file but didn't update rules.test.ts.",
+      "action": "hook",
+      "severity": "warning"
+    }
+  ]
+}

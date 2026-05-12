@@ -1,4 +1,4 @@
-// Project Viewer — diagnostics public surface.
+// little-oxford — diagnostics public surface.
 //
 // Universal exports only. Anything importable from BOTH the extension host
 // (Node) and the webview (browser) lives here. Sinks that depend on a

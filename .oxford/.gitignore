@@ -1,0 +1,34 @@
+# Audit log — append-only, can grow very large, persists across branches
+audit.jsonl
+
+# Debug logs
+debug.log
+
+# Monitor runtime files
+.monitor_feed
+.monitor_heartbeat
+
+# Old prototype artifacts
+alerts.jsonl
+alerts.jsonl.bak
+.turn_ended
+__pycache__/
+BAK_*.json
+live_monitor.py
+monitor.py
+filters.sh
+
+# Internal scratch files (design experiments, replaced models)
+capture.json
+future_model.json
+sequence.json
+target.json
+
+# Everything else in .oxford/ SHOULD be committed:
+# model.json — the diagram definition
+# layout.json — pinned positions
+# activity.json — agent activity timestamps
+# hooks/ — hook message files
+# rules/ — audit rule definitions
+# config.json
+# monitor.sh — user-facing monitor script

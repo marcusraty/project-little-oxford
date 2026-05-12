@@ -1,0 +1,342 @@
+{
+  "components": {
+    "user": {
+      "kind": "human_actor",
+      "label": "Developer",
+      "description": "Edits model.json, drags components to pin positions, reviews audit alerts in the oxford-audit panel. Runs .oxford/monitor.sh to see rule matches streamed to the agent. Uses VS Code as the primary interface.",
+      "parent": null
+    },
+    "agent": {
+      "kind": "ai_actor",
+      "label": "Claude Code",
+      "description": "AI coding agent + its runtime, as one. Reads the codebase and authors model.json following BOOTSTRAP.md. Writes JSONL transcripts of every turn (text + thinking + tool_use + tool_result) to ~/.claude/projects/<encoded-path>/<uuid>.jsonl. Emits compact_boundary events on context compaction. The extension discovers and watches these JSONL files directly. Runs .oxford/monitor.sh via the Monitor tool to receive rule-match feedback in real time.",
+      "parent": null
+    },
+    "vscode_api": {
+      "kind": "external_host",
+      "label": "VS Code",
+      "description": "Hosts the extension. Provides createFileSystemWatcher (for model.json and CC JSONL), webview iframes, WebviewViewProvider (audit panel), status bar, command palette, settings UI, native walkthroughs, and the editor API.",
+      "parent": null
+    },
+    "bootstrap_doc": {
+      "kind": "document",
+      "label": "BOOTSTRAP.md",
+      "description": "Prompt-style spec teaching an agent how to explore a codebase and emit a valid model.json. Covers data model, reading discipline, anti-patterns, and live-writing workflow.",
+      "parent": null,
+      "anchors": [{ "type": "file", "value": "BOOTSTRAP.md" }]
+    },
+    "model_json": {
+      "kind": "data_file",
+      "label": ".oxford/model.json",
+      "description": "Source of truth for the diagram. Human/agent authored. Contains components, relationships, rules, overrides, _notes. Layout stored separately in layout.json.",
+      "parent": null,
+      "anchors": [{ "type": "file", "value": ".oxford/model.json" }]
+    },
+    "layout_json": {
+      "kind": "data_file",
+      "label": ".oxford/layout.json",
+      "description": "Pinned positions written by the extension on drag-to-pin. Merged onto the diagram at read time by storage.readDiagram. GCs orphan entries on write.",
+      "parent": null,
+      "anchors": [{ "type": "file", "value": ".oxford/layout.json" }]
+    },
+    "activity_json": {
+      "kind": "data_file",
+      "label": ".oxford/activity.json",
+      "description": "Per-component activity tracking. Fields: last_read, last_read_session, last_edit, last_edit_session, last_model_update, last_model_update_verified. Drives staleness dots (green/red) on diagram components.",
+      "parent": null,
+      "anchors": [{ "type": "file", "value": ".oxford/activity.json" }]
+    },
+    "monitor_feed": {
+      "kind": "data_file",
+      "label": ".oxford/.monitor_feed",
+      "description": "Append-only text file. Each line is a rule match message written by MonitorSink. The monitor script (tail -n 0 -f) streams new lines to the agent via the Monitor tool — restarts only show events appended after start, not history.",
+      "parent": null
+    },
+    "claude_jsonl": {
+      "kind": "data_file",
+      "label": "CC Session JSONL",
+      "description": "~/.claude/projects/<encoded-path>/<uuid>.jsonl. The agent's full transcript: user prompts, assistant responses (text + thinking + tool_use), tool results, compact_boundary events. One file per conversation.",
+      "parent": null
+    },
+    "audit_log": {
+      "kind": "data_file",
+      "label": ".oxford/audit.jsonl",
+      "description": "Append-only normalized audit events. Each line is an AuditEntry JSON object. Deduped on startup via seenIds set — no duplicate entries across restarts. Source of truth for the audit panel's history loading.",
+      "parent": null,
+      "anchors": [{ "type": "file", "value": ".oxford/audit.jsonl" }]
+    },
+    "rules_dir": {
+      "kind": "data_file",
+      "label": ".oxford/rules/",
+      "description": "Shareable audit rules as JSON files. behavioral.json (F4-F12 pattern matching) and companion.json (C1-C14 cross-file checks). Users can add custom rules or import from other projects. JSON Schema validation via contributes.jsonValidation.",
+      "parent": null
+    },
+    "monitor_script": {
+      "kind": "data_file",
+      "label": ".oxford/monitor.sh",
+      "description": "Bash script. Writes heartbeat to .monitor_heartbeat every 2s (extension polls for green/red indicator). Tails .monitor_feed and echoes each line to stdout. Agent runs via Monitor tool to see rule matches in real-time.",
+      "parent": null,
+      "anchors": [{ "type": "file", "value": ".oxford/monitor.sh" }]
+    },
+    "extension_host": {
+      "kind": "package",
+      "label": "Extension Host",
+      "description": "Orchestration layer. Activates subsystems, wires callbacks, manages lifecycle. Creates audit engine + rule engine, starts model watcher (150ms debounce), registers commands, sets up sink architecture for rule output dispatch."
+    },
+    "extension": {
+      "kind": "extension",
+      "label": "Activate / Deactivate",
+      "description": "Orchestration only — wires the audit pipeline (engine, rule engine, sinks, audit panel), model watcher, commands, status bar, custom rule editor, and one-time relocation of the audit view to the bottom panel. Shared subsystem references live in ExtensionState. Polls the monitor heartbeat every 3s for the connected indicator. Drains in-flight work on deactivate so callbacks can't fire after disposal.",
+      "parent": "extension_host",
+      "anchors": [{ "type": "file", "value": "src/vscode_extension/extension.ts" }]
+    },
+    "statusbar": {
+      "kind": "module",
+      "label": "Status Bar Pill",
+      "description": "Displays component count and audit alert count (with error background when errors > 0). Clicking the pill fires `little-oxford.pillMenu` which opens a quick-pick: Open Diagram, Get Help.",
+      "parent": "extension_host",
+      "anchors": [{ "type": "file", "value": "src/vscode_extension/statusbar.ts" }]
+    },
+    "monitor_module": {
+      "kind": "module",
+      "label": "Monitor I/O",
+      "description": "writeMonitorMessage(root, message) appends to .monitor_feed. readHeartbeat(root) reads .monitor_heartbeat timestamp. isMonitorRunning(root) returns true if heartbeat < 5s old. Also exports MONITOR_COPY_TEXT — the agent-facing instructions the audit panel's Copy button puts on the clipboard.",
+      "parent": "extension_host",
+      "anchors": [{ "type": "file", "value": "src/vscode_extension/monitor.ts" }]
+    },
+    "help_menu": {
+      "kind": "module",
+      "label": "Help Menu",
+      "description": "Single source of truth for the Help affordances. helpMenuItems() returns the quick-pick options (Email maintainer via mailto, Start GitHub discussion). Invoked by `little-oxford.openHelp` and reused by the diagram panel button, audit panel link, and status bar pill menu.",
+      "parent": "extension_host",
+      "anchors": [{ "type": "file", "value": "src/vscode_extension/help.ts" }]
+    },
+    "rules_watcher": {
+      "kind": "module",
+      "label": "Rules Watcher",
+      "description": "VS Code createFileSystemWatcher on .oxford/rules/*.json with 250ms debounce. On change/create/delete: calls reloadRules and then auditView.notifyRulesReloaded with the new count. Replaces the old `Create Default Rules` command — edits to rule files now take effect without any user action.",
+      "parent": "extension_host",
+      "anchors": [{ "type": "file", "value": "src/vscode_extension/rules_watcher_setup.ts" }]
+    },
+
+    "diagram_system": {
+      "kind": "package",
+      "label": "Diagram System",
+      "description": "Reads model.json, renders SVG via ELK with staleness dots (green/red per component), displays in webview. Handles drag-to-pin, click-to-open, pan/zoom, model picker, reset layout.",
+      "note": "Same split as audit_system: pure logic (renderer, storage_io, panel_body) lives in src/diagram/ and is unit-testable. VS-Code-coupled pieces (panel, webview, anchor) live in src/vscode_extension/ because they need the webview API and editor commands — only npm run test:vscode and Playwright reach them. Renderer pipeline is pure (computeLayout → applyPinnedOverrides → emitSvg, no side effects) which is why staleness/layout bugs are easy to unit test; drag/visibility/positioning bugs need the integration suite."
+    },
+    "panel": {
+      "kind": "module",
+      "label": "Panel Coordinator",
+      "description": "Manages the diagram webview lifecycle. Reads diagram + activity, filters activity to the current component set (so deletions can't leave ghost tooltips), renders SVG via the pure renderer, persists merged layout, posts the result to the webview. Validates inbound webview messages (pin / open-anchor / reset-layout / open-settings / open-help / set-active-model) through a typed parser before dispatching to handlers.",
+      "parent": "diagram_system",
+      "anchors": [{ "type": "file", "value": "src/vscode_extension/panel.ts" }]
+    },
+    "panel_body": {
+      "kind": "module",
+      "label": "Panel Body (pure HTML)",
+      "description": "Pure-string body markup for the diagram webview. No vscode import — so it's loaded by both production (via panel_html.ts which wraps it with the CSP head and script tag) and the Playwright harness generator. Drift between production and test surface is impossible by construction.",
+      "parent": "diagram_system",
+      "anchors": [{ "type": "file", "value": "src/vscode_extension/panel_body.ts" }]
+    },
+    "renderer": {
+      "kind": "module",
+      "label": "Renderer",
+      "description": "Pure pipeline: collectDiagnostics → computeLayout → applyPinnedOverrides → emitSvg. Accepts optional activity parameter to render green/red staleness dots on each component. Supports tiered (default) and layered layout presets. No side effects.",
+      "parent": "diagram_system",
+      "anchors": [{ "type": "file", "value": "src/diagram/render.ts" }]
+    },
+    "storage_io": {
+      "kind": "module",
+      "label": "Storage I/O",
+      "description": "File access layer. readDiagram merges layout.json onto the model. mutateDiagram strips layout before writing. mutateLayout uses a serialized write queue for atomicity. GCs orphan entries.",
+      "parent": "diagram_system",
+      "anchors": [{ "type": "file", "value": "src/diagram/storage.ts" }]
+    },
+    "anchor": {
+      "kind": "module",
+      "label": "Anchor Resolver",
+      "description": "Resolves anchor values (file path with optional :symbol suffix) to absolute filesystem paths. Security boundary — rejects paths that escape the workspace root.",
+      "parent": "diagram_system",
+      "anchors": [{ "type": "file", "value": "src/vscode_extension/anchor.ts" }]
+    },
+    "webview": {
+      "kind": "process",
+      "label": "Diagram Webview",
+      "description": "Sandboxed Chromium iframe. SVG display via innerHTML, d3-drag for drag-to-pin, d3-zoom for pan/zoom, live edge geometry updates during drag (rect, ellipse, path, text, and the staleness dot — all repositioned together). Tooltips show: activity (last read/edited), staleness status (5 explicit states), component metadata. Cmd+click opens file anchors. Help button (orange, top-right corner) posts open-help to the host.",
+      "parent": "diagram_system",
+      "anchors": [{ "type": "file", "value": "src/vscode_extension/webview.ts" }]
+    },
+
+    "audit_system": {
+      "kind": "package",
+      "label": "Audit System",
+      "description": "Watches what the AI agent does. CC JSONL → normalize → evaluate rules → dispatch via sinks (monitor feed, audit panel, status bar, activity dots). Tracks context window state via compact_boundary events.",
+      "note": "Split across two source folders: pure logic (normalizer, rule_engine, sinks, default_rules, activity_tracker) lives in src/audit/ and src/diagram/ — unit-testable in Node via c8. VS-Code-coupled pieces (audit_engine, audit_view, rule_editor) live in src/vscode_extension/ because they need VS Code APIs (file watcher, webview, custom editor) — c8 can't reach them; only npm run test:vscode does. No single test layer covers the whole pipeline end-to-end. Bugs in the seam need the integration suite to catch."
+    },
+    "audit_engine": {
+      "kind": "module",
+      "label": "Audit Engine",
+      "description": "Watches the CC JSONL directory. One Normalizer per session. Streams new bytes via offset tracking — never materializes the unread tail. Deduplicates entries via a capacity-bounded seen-id set, seeded from the tail of audit.jsonl on startup. Per-session promise queue serializes overlapping reads of the same transcript. Emits audit events, updates activity.json, and appends to audit.jsonl; drains queued work on dispose.",
+      "parent": "audit_system",
+      "anchors": [{ "type": "file", "value": "src/vscode_extension/audit_engine.ts" }]
+    },
+    "normalizer": {
+      "kind": "module",
+      "label": "Normalizer",
+      "description": "Stateful parser: CC JSONL → AuditEntry[]. One instance per session. Tracks turn_id, merges tool_use with tool_result, extracts touched_paths per tool type. Preserves compact_boundary events with subtype and compactMetadata for context tracking.",
+      "parent": "audit_system",
+      "anchors": [{ "type": "file", "value": "src/audit/normalizer.ts" }]
+    },
+    "rule_engine": {
+      "kind": "module",
+      "label": "Rule Engine",
+      "description": "processEntry(entry) → ProcessResult. Combines: behavioral rule evaluation (regex on text/thinking), companion rule checking (file pairs per turn), context tracking (filesInContext set, cleared on compact_boundary), and intent-to-verify detection (pattern match for diagram update intent, tracks reads before model.json edit, verifyModelUpdate returns unverified components).",
+      "parent": "audit_system",
+      "anchors": [{ "type": "file", "value": "src/audit/rules.ts" }]
+    },
+    "sinks": {
+      "kind": "module",
+      "label": "Rule Sinks",
+      "description": "RuleSink interface with 4 implementations. MonitorSink writes to .monitor_feed (lines formatted by formatMonitorLine, which tags each match with the event kind, e.g. `[F11] (thinking) ...` / `[F4] (tool_use:Edit) ...`). PanelSink pushes to audit panel webview. StatusBarSink increments warning/error counters. ActivitySink updates activity.json with last_model_update and verified flag. Extension dispatches ProcessResult to all sinks in a loop.",
+      "parent": "audit_system",
+      "anchors": [{ "type": "file", "value": "src/audit/sinks.ts" }]
+    },
+    "default_rules": {
+      "kind": "module",
+      "label": "Built-in Rules",
+      "description": "Behavioral: F4 shortcut language, F5 self-reassurance, F7 assumed-ok, F8 thinking reassurance, F9 manual test, F10 untestable claim, F11 test-free implementation, F12 context anxiety. Companion rules are empty in defaults (user creates their own in .oxford/rules/).",
+      "parent": "audit_system",
+      "anchors": [{ "type": "file", "value": "src/audit/default_rules.ts" }]
+    },
+    "activity_tracker": {
+      "kind": "module",
+      "label": "Activity Tracker",
+      "description": "Bridge between audit and diagram. buildAnchorMap maps file anchors to component IDs. updateActivity routes Read/Edit/Write to last_read/last_edit fields. computeStaleness checks last_model_update + verified flag for green/red dots. diffModelComponents diffs two model objects to detect which components changed.",
+      "parent": "audit_system",
+      "anchors": [{ "type": "file", "value": "src/diagram/activity.ts" }]
+    },
+    "audit_view": {
+      "kind": "module",
+      "label": "Audit Panel",
+      "description": "WebviewViewProvider for the bottom panel. Shows events with filter buttons (All/Text/Tools/Thinking/Prompts/Rules), warning/error toggles, rule-match badges colored by severity. Monitor status row at top with green/red dot, copy-command button (puts MONITOR_COPY_TEXT on the clipboard), feed link, live rules-status chip (\"N rules · just reloaded / Xs ago / Xm ago\" — webview ticks every 10s via setInterval), and an orange Help link. Host serves raw timestamp + count to the chip so it ages over time; replays the last reload state on webview re-attach so the chip survives panel close/open. Reads the tail of audit.jsonl on panel open and serializes reload so rapid panel re-opens can't double-count. Buffers outbound messages until the webview resolves. Sessions pane lists CC sessions with last-logged timestamps.",
+      "parent": "audit_system",
+      "anchors": [{ "type": "file", "value": "src/vscode_extension/audit_view.ts" }]
+    },
+    "rule_editor": {
+      "kind": "module",
+      "label": "Rule Editor",
+      "description": "CustomTextEditorProvider for .oxford/rules/*.json files. Form UI with collapsible rules, dropdowns for action/severity, checkboxes for event kinds. Registered as an optional editor (priority: option) so users can choose between form and raw JSON.",
+      "parent": "audit_system",
+      "anchors": [{ "type": "file", "value": "src/vscode_extension/rule_editor.ts" }]
+    },
+
+    "elkjs": {
+      "kind": "external_lib",
+      "label": "elkjs",
+      "description": "Eclipse Layout Kernel (JS port). Graph layout engine that computes node positions minimizing edge crossings. Used by the renderer's computeLayout pipeline."
+    },
+    "d3_modules": {
+      "kind": "external_lib",
+      "label": "D3 micro-modules",
+      "description": "d3-selection, d3-zoom, d3-drag. Handles pan/zoom via viewport transform, drag-to-pin with SVG coordinate conversion (getScreenCTM), and DOM selection."
+    }
+  },
+  "relationships": {
+    "user_edits_model": { "kind": "edits", "from": "user", "to": "model_json" },
+    "user_directs_agent": { "kind": "prompts", "from": "user", "to": "agent" },
+    "user_views_diagram": { "kind": "views", "from": "webview", "to": "user" },
+    "user_views_audit": { "kind": "views", "from": "audit_view", "to": "user" },
+    "agent_reads_bootstrap": { "kind": "follows", "from": "agent", "to": "bootstrap_doc" },
+    "agent_writes_model": { "kind": "writes", "from": "agent", "to": "model_json" },
+    "agent_runs_monitor": { "kind": "runs", "from": "agent", "to": "monitor_script" },
+    "agent_writes_jsonl": { "kind": "writes", "from": "agent", "to": "claude_jsonl" },
+    "extension_creates_panel": { "kind": "creates", "from": "extension", "to": "panel" },
+    "extension_creates_engine": { "kind": "creates", "from": "extension", "to": "audit_engine" },
+    "extension_creates_rules": { "kind": "creates", "from": "extension", "to": "rule_engine" },
+    "extension_creates_sinks": { "kind": "creates", "from": "extension", "to": "sinks" },
+    "extension_creates_audit_view": { "kind": "creates", "from": "extension", "to": "audit_view" },
+    "extension_updates_statusbar": { "kind": "updates", "from": "extension", "to": "statusbar" },
+    "extension_watches_model": {
+      "kind": "watches", "from": "extension", "to": "model_json",
+      "metadata": { "note": "VS Code createFileSystemWatcher. 150ms debounce. On change → rebuildAnchorMap + rerender." }
+    },
+    "extension_polls_heartbeat": { "kind": "polls", "from": "extension", "to": "monitor_module" },
+    "panel_renders": { "kind": "calls", "from": "panel", "to": "renderer" },
+    "panel_uses_body": { "kind": "wraps", "from": "panel", "to": "panel_body" },
+    "panel_reads_storage": { "kind": "reads_writes", "from": "panel", "to": "storage_io" },
+    "panel_reads_activity": { "kind": "reads", "from": "panel", "to": "activity_tracker" },
+    "panel_posts_svg": {
+      "kind": "post_message", "from": "panel", "to": "webview",
+      "metadata": { "note": "SVG + activity + diagnostics + model picker state" }
+    },
+    "webview_posts_actions": {
+      "kind": "post_message", "from": "webview", "to": "panel",
+      "metadata": { "note": "pin, open-anchor, reset-layout, set-active-model" }
+    },
+    "panel_resolves_anchor": { "kind": "calls", "from": "panel", "to": "anchor" },
+    "panel_opens_file": { "kind": "opens_file_in", "from": "panel", "to": "vscode_api" },
+    "storage_reads_model": { "kind": "reads", "from": "storage_io", "to": "model_json" },
+    "storage_reads_layout": { "kind": "reads_writes", "from": "storage_io", "to": "layout_json" },
+    "renderer_uses_elk": { "kind": "lays_out_with", "from": "renderer", "to": "elkjs" },
+    "webview_uses_d3": { "kind": "uses", "from": "webview", "to": "d3_modules" },
+    "engine_watches_jsonl": {
+      "kind": "watches", "from": "audit_engine", "to": "claude_jsonl",
+      "metadata": { "note": "VS Code createFileSystemWatcher with RelativePattern + Uri.file. 100ms debounce. Deduplicates via seenIds." }
+    },
+    "engine_normalizes": { "kind": "calls", "from": "audit_engine", "to": "normalizer" },
+    "engine_updates_activity": { "kind": "calls", "from": "audit_engine", "to": "activity_tracker" },
+    "engine_writes_audit_log": { "kind": "appends", "from": "audit_engine", "to": "audit_log" },
+    "activity_writes": { "kind": "writes", "from": "activity_tracker", "to": "activity_json" },
+    "rule_engine_processes": {
+      "kind": "evaluates", "from": "rule_engine", "to": "sinks",
+      "metadata": { "note": "processEntry() → ProcessResult → dispatched to all registered sinks" }
+    },
+    "rules_load_dir": { "kind": "reads", "from": "rule_engine", "to": "rules_dir" },
+    "rules_fallback_defaults": { "kind": "fallback", "from": "rule_engine", "to": "default_rules" },
+    "watcher_watches_rules": {
+      "kind": "watches", "from": "rules_watcher", "to": "rules_dir",
+      "metadata": { "note": "VS Code createFileSystemWatcher on .oxford/rules/*.json. 250ms debounce. Replaces the deleted Create Default Rules command." }
+    },
+    "watcher_reloads_engine": { "kind": "reloads", "from": "rules_watcher", "to": "rule_engine" },
+    "watcher_notifies_audit_view": { "kind": "post_message", "from": "rules_watcher", "to": "audit_view" },
+    "monitor_sink_writes": { "kind": "appends", "from": "sinks", "to": "monitor_feed" },
+    "activity_sink_writes": { "kind": "writes", "from": "sinks", "to": "activity_json" },
+    "panel_sink_pushes": { "kind": "post_message", "from": "sinks", "to": "audit_view" },
+    "monitor_script_tails": { "kind": "reads", "from": "monitor_script", "to": "monitor_feed" },
+    "audit_view_reads_log": { "kind": "reads", "from": "audit_view", "to": "audit_log" },
+    "vscode_hosts": { "kind": "hosts", "from": "vscode_api", "to": "extension" },
+    "panel_opens_help": { "kind": "calls", "from": "panel", "to": "help_menu" },
+    "audit_view_opens_help": { "kind": "calls", "from": "audit_view", "to": "help_menu" },
+    "statusbar_opens_help": { "kind": "calls", "from": "statusbar", "to": "help_menu" },
+    "extension_wires_watcher": { "kind": "creates", "from": "extension", "to": "rules_watcher" }
+  },
+  "rules": {
+    "component_styles": {
+      "human_actor": { "symbol": "rectangle", "color": "#a78bfa" },
+      "ai_actor": { "symbol": "rectangle", "color": "#a78bfa", "border": "dashed" },
+      "document": { "symbol": "rectangle", "color": "#94a3b8", "border": "dashed" },
+      "data_file": { "symbol": "cylinder", "color": "#2b6cb0" },
+      "extension": { "symbol": "rectangle", "color": "#38bdf8" },
+      "module": { "symbol": "rectangle", "color": "#0ea5e9" },
+      "process": { "symbol": "rectangle", "color": "#22c55e" },
+      "package": { "symbol": "rectangle", "color": "#cbd5e1", "border": "dashed" },
+      "external_lib": { "symbol": "rectangle", "color": "#f59e0b", "border": "dashed" },
+      "external_host": { "symbol": "rectangle", "color": "#fb7185", "border": "dashed" }
+    },
+    "relationship_styles": {
+      "follows": { "style": "dashed" },
+      "prompts": { "style": "dashed" },
+      "watches": { "style": "dashed" },
+      "captures": { "style": "dashed" },
+      "post_message": { "style": "dashed" },
+      "hosts": { "style": "dashed" },
+      "checks": { "style": "dashed" },
+      "fallback": { "style": "dashed" },
+      "polls": { "style": "dashed" },
+      "runs": { "style": "dashed" }
+    }
+  },
+  "overrides": {},
+  "_notes": "36 components, 49 relationships. Extension host is orchestration-only; audit/model wiring lives in setup modules under it. Sink architecture: rule engine → ProcessResult → 4 sinks (monitor, panel, status bar, activity); MonitorSink lines tagged with event kind via formatMonitorLine. Rules watcher auto-reloads on .oxford/rules/*.json edits (replaces the deleted Create Default Rules command). Help affordances on three surfaces share a single helpMenuItems() source via help.ts. Diagram panel body is pure HTML (panel_body.ts) so production + Playwright harness can share one source; drift caught by a unit test (harness generator lives in scripts/ as test infra, not modeled here). Monitor script uses `tail -n 0 -f` so restarts don't replay history. Staleness v2: intent-to-verify with context tracking via compact_boundary. Disposal hygiene: timers cleared, queues drained, webview messages validated at the boundary."
+}

@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "little-oxford audit rule file",
+  "type": "object",
+  "required": ["rules"],
+  "properties": {
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "kinds", "action", "severity"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique rule identifier (e.g., F7, C2)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable rule name"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this rule detects and why"
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["text", "thinking", "tool_use", "user_prompt", "system"]
+            },
+            "description": "Which audit event kinds this rule applies to"
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Regex pattern for behavioral rules — matches against event text"
+          },
+          "trigger": {
+            "type": "string",
+            "description": "File path that triggers a companion check (e.g., src/diagram/render.ts)"
+          },
+          "companions": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Files that should also be edited when the trigger file is edited"
+          },
+          "any": {
+            "type": "boolean",
+            "description": "If true, ANY companion being edited satisfies the rule. If false, ALL must be edited.",
+            "default": false
+          },
+          "order": {
+            "type": "string",
+            "enum": ["companion_first"],
+            "description": "If 'companion_first', the companion file must be edited BEFORE the trigger file (e.g., write tests before source code)"
+          },
+          "hook": {
+            "type": "string",
+            "enum": ["Stop", "PostToolUse", "PreToolUse"],
+            "description": "Which CC hook this rule writes to when it fires"
+          },
+          "message": {
+            "type": "string",
+            "description": "Message the AI agent sees when this rule fires"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["hook", "log"],
+            "description": "hook = write message to hook file (agent sees it), log = record in audit panel only"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["info", "warning", "error"],
+            "description": "Alert severity level"
+          }
+        }
+      }
+    }
+  }
+}

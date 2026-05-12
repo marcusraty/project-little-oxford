@@ -270,7 +270,7 @@ test('computeLayout (saved-pins fast path): hierarchical saved layout produces c
   }
 });
 
-// Higher-fidelity guard: same shape as the production .viewer/model.json
+// Higher-fidelity guard: same shape as the production .oxford/model.json
 // (12 components, one container of 3, sibling top-level components, edges
 // crossing the container boundary). The smaller container test passes
 // even when the visual bug is present, suggesting the smaller graph
@@ -461,4 +461,65 @@ test('emitSvg: edge elements have a single class= attribute carrying both hook a
       `edge label missing theme fill class — would render default black: ${t}`,
     );
   }
+});
+
+// --- staleness dot (Phase 3) ---
+
+test('emitSvg: fresh component gets green staleness dot', async () => {
+  const model: Diagram = {
+    components: { svc: { kind: 'service', label: 'Svc', parent: null } },
+    relationships: {},
+    layout: { components: { svc: { x: 0, y: 0, w: 220, h: 80 } } },
+  };
+  const out = await computeLayout(model);
+  const activity = { svc: { last_read: '2026-05-10T11:00:00Z', last_read_session: 's1' } };
+  const svg = emitSvg(model, out, activity);
+  assert.ok(svg.includes('pv-staleness-dot'), 'should have staleness dot');
+  assert.ok(svg.includes('fill="#22c55e"'), 'fresh dot should be green');
+});
+
+test('emitSvg: stale component gets red dot', async () => {
+  const model: Diagram = {
+    components: { svc: { kind: 'service', label: 'Svc', parent: null } },
+    relationships: {},
+    layout: { components: { svc: { x: 0, y: 0, w: 220, h: 80 } } },
+  };
+  const out = await computeLayout(model);
+  const activity = {
+    svc: {
+      last_read: '2026-05-10T10:00:00Z', last_read_session: 's1',
+      last_edit: '2026-05-10T11:00:00Z', last_edit_session: 's2',
+    },
+  };
+  const svg = emitSvg(model, out, activity);
+  assert.ok(svg.includes('pv-staleness-dot'), 'should have staleness dot');
+  assert.ok(svg.includes('fill="#ef4444"'), 'stale dot should be red');
+});
+
+test('emitSvg: component without activity gets no dot', async () => {
+  const model: Diagram = {
+    components: { svc: { kind: 'service', label: 'Svc', parent: null } },
+    relationships: {},
+    layout: { components: { svc: { x: 0, y: 0, w: 220, h: 80 } } },
+  };
+  const out = await computeLayout(model);
+  const svg = emitSvg(model, out);
+  assert.ok(!svg.includes('pv-staleness-dot'), 'no activity means no dot');
+});
+
+test('emitSvg: dot position is top-right of component box', async () => {
+  const model: Diagram = {
+    components: { svc: { kind: 'service', label: 'Svc', parent: null } },
+    relationships: {},
+    layout: { components: { svc: { x: 100, y: 50, w: 220, h: 80 } } },
+  };
+  const out = await computeLayout(model);
+  const activity = { svc: { last_read: '2026-05-10T11:00:00Z', last_read_session: 's1' } };
+  const svg = emitSvg(model, out, activity);
+  const dotMatch = /pv-staleness-dot[^>]*cx="(\d+)"[^>]*cy="(\d+)"/.exec(svg);
+  assert.ok(dotMatch, 'dot should have cx and cy');
+  const cx = Number(dotMatch![1]);
+  const cy = Number(dotMatch![2]);
+  assert.ok(cx >= 300, `cx should be near right edge (x+w), got ${cx}`);
+  assert.ok(cy <= 70, `cy should be near top edge (y), got ${cy}`);
 });

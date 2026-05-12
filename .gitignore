@@ -4,5 +4,11 @@ dist/
 *.log
 .DS_Store
 
-# Claude Code local-only settings
+# Claude Code local settings
 .claude/settings.local.json
+.claude/settings.json
+
+# Test artifacts
+.vscode-test/
+test-results/
+coverage/

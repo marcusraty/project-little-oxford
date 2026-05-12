@@ -1,4 +1,4 @@
-// Project Viewer — diagnostics types.
+// little-oxford — diagnostics types.
 //
 // Pure types only. No runtime, no IO, no platform deps. Imported by every
 // process (extension host, webview) and by every layer (storage, render,
@@ -7,7 +7,7 @@
 // The recorder is intentionally tiny: emit, ingest, use. Anything richer
 // (filtering, sampling, batching) is built as a Sink decorator.
 
-export type DiagScope = 'webview' | 'host' | 'storage' | 'render';
+export type DiagScope = 'webview' | 'host' | 'storage' | 'render' | 'daemon';
 
 // One entry in the diagnostic log. JSON-serializable so it can survive the
 // webview ↔ host postMessage hop and the file write hop without extra
@@ -35,8 +35,13 @@ export interface Sink {
 // `ingest` accepts an already-formed event without restamping (used by the
 // host when forwarding events that crossed the postMessage bridge from the
 // webview — the original `t` is the truth).
+// `flush` waits for any queued sink writes (e.g. file sinks) to settle.
+//   D7: previously `flush` was a method on RealRecorder but not the
+//   Recorder interface, so callers using the exported `recorder` proxy
+//   couldn't reach it.
 export interface Recorder {
   emit(scope: DiagScope, stage: string, data: unknown, traceId?: string): void;
   ingest(e: DiagEvent): void;
   use(sink: Sink): () => void;  // returns a disposer
+  flush(): Promise<void>;
 }

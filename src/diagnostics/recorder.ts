@@ -1,4 +1,4 @@
-// Project Viewer — diagnostics recorder.
+// little-oxford — diagnostics recorder.
 //
 // `recorder` is a stable, exported singleton that consumers import once
 // and call into. Internally it delegates to either:
@@ -22,6 +22,7 @@ const NOOP: Recorder = {
   use() {
     return () => {};
   },
+  async flush() { /* nothing to flush */ },
 };
 
 class RealRecorder implements Recorder {
@@ -73,6 +74,9 @@ class RecorderProxy implements Recorder {
   }
   use(sink: Sink): () => void {
     return this.impl.use(sink);
+  }
+  flush(): Promise<void> {
+    return this.impl.flush();
   }
 }
 

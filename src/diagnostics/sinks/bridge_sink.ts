@@ -1,4 +1,4 @@
-// Project Viewer — postMessage bridge sink.
+// little-oxford — postMessage bridge sink.
 //
 // Used inside the webview. Wraps each event in `{ type: '__diag', event }`
 // and posts it across the iframe boundary to the extension host. The host

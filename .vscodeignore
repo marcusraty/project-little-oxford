@@ -1,23 +1,35 @@
-# Source — bundled into dist/extension.js and dist/webview.js by esbuild
+# Source — bundled into dist/ by esbuild
 src/**
 scripts/**
+tests/**
 
-# Build configs — runtime doesn't need them
+# Build configs
 tsconfig.json
 esbuild.config.mjs
 .gitignore
 
-# Source-only deps — already inlined by esbuild
+# Dependencies — already inlined by esbuild
 node_modules/**
 
-# Sourcemaps (drop to keep package small)
+# Sourcemaps
 **/*.map
+
+# Dist files the extension doesn't need (CLI, daemon, replay, tests)
+dist/cli.js
+dist/daemon_main.js
+dist/replay.js
+dist/tests.js
+dist/wizard.js
 
 # Local-only state
 .claude/**
 .git/**
 .github/**
-.viewer/**
+.oxford/**
+
+# Internal docs
+INCIDENT.md
+CLAUDE.md
 
 # This file
 .vscodeignore

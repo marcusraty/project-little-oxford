@@ -1,0 +1,154 @@
+{
+  "model_json": {
+    "last_read": "2026-05-13T06:18:30.119Z",
+    "last_read_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_edit": "2026-05-13T06:30:28.869Z",
+    "last_edit_session": "e5bc54d1-2710-4623-8baa-08329a9aac03"
+  },
+  "audit_view": {
+    "last_read": "2026-05-13T02:40:14.001Z",
+    "last_read_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_model_update": "2026-05-13T06:19:02.494Z",
+    "last_model_update_verified": true,
+    "last_edit": "2026-05-13T04:32:10.234Z",
+    "last_edit_session": "e5bc54d1-2710-4623-8baa-08329a9aac03"
+  },
+  "activity_tracker": {
+    "last_read": "2026-05-13T01:16:02.386Z",
+    "last_read_session": "e5bc54d1-2710-4623-8baa-08329a9aac03"
+  },
+  "monitor_module": {
+    "last_read": "2026-05-13T02:20:48.998Z",
+    "last_read_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_edit": "2026-05-13T05:41:00.829Z",
+    "last_edit_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_model_update": "2026-05-13T06:19:02.494Z",
+    "last_model_update_verified": true
+  },
+  "monitor_script": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_edit": "2026-05-13T02:25:36.484Z",
+    "last_edit_session": "e5bc54d1-2710-4623-8baa-08329a9aac03"
+  },
+  "default_rules": {
+    "last_read": "2026-05-13T02:26:55.069Z",
+    "last_read_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_edit": "2026-05-13T03:13:56.671Z",
+    "last_edit_session": "e5bc54d1-2710-4623-8baa-08329a9aac03"
+  },
+  "rule_engine": {
+    "last_read": "2026-05-13T02:35:14.854Z",
+    "last_read_session": "e5bc54d1-2710-4623-8baa-08329a9aac03"
+  },
+  "sinks": {
+    "last_read": "2026-05-13T02:49:55.157Z",
+    "last_read_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_edit": "2026-05-13T02:50:00.125Z",
+    "last_edit_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_model_update": "2026-05-13T06:19:02.494Z",
+    "last_model_update_verified": true
+  },
+  "statusbar": {
+    "last_read": "2026-05-13T03:04:41.557Z",
+    "last_read_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_edit": "2026-05-13T05:06:35.021Z",
+    "last_edit_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_model_update": "2026-05-13T06:19:02.494Z",
+    "last_model_update_verified": true
+  },
+  "webview": {
+    "last_read": "2026-05-13T05:56:50.123Z",
+    "last_read_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_edit": "2026-05-13T06:01:37.694Z",
+    "last_edit_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_model_update": "2026-05-13T06:19:02.494Z",
+    "last_model_update_verified": true
+  },
+  "panel": {
+    "last_read": "2026-05-13T03:06:58.921Z",
+    "last_read_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_edit": "2026-05-13T04:32:10.234Z",
+    "last_edit_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_model_update": "2026-05-13T06:19:02.494Z",
+    "last_model_update_verified": true
+  },
+  "extension": {
+    "last_read": "2026-05-13T05:06:05.624Z",
+    "last_read_session": "e5bc54d1-2710-4623-8baa-08329a9aac03",
+    "last_edit": "2026-05-13T05:06:22.563Z",
+    "last_edit_session": "e5bc54d1-2710-4623-8baa-08329a9aac03"
+  },
+  "user": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_model_update": "2026-05-13T05:08:55.586Z",
+    "last_model_update_verified": true
+  },
+  "git_hook": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_model_update": "2026-05-13T05:08:55.586Z",
+    "last_model_update_verified": true
+  },
+  "hook_manager": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_model_update": "2026-05-13T05:08:55.586Z",
+    "last_model_update_verified": true
+  },
+  "monitor_feed": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_model_update": "2026-05-13T06:19:02.494Z",
+    "last_model_update_verified": true
+  },
+  "help_menu": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_model_update": "2026-05-13T06:19:02.494Z",
+    "last_model_update_verified": true
+  },
+  "rules_watcher": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_model_update": "2026-05-13T06:19:02.494Z",
+    "last_model_update_verified": true
+  },
+  "panel_body": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_model_update": "2026-05-13T06:19:02.494Z",
+    "last_model_update_verified": true
+  },
+  "harness_generator": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_model_update": "2026-05-13T06:23:27.624Z",
+    "last_model_update_verified": true
+  },
+  "agent": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_model_update": "2026-05-13T06:23:27.624Z",
+    "last_model_update_verified": true
+  },
+  "claude_code": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_model_update": "2026-05-13T06:23:27.624Z",
+    "last_model_update_verified": true
+  },
+  "diagram_system": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_model_update": "2026-05-13T06:30:24.276Z",
+    "last_model_update_verified": true
+  },
+  "audit_system": {
+    "last_read": "",
+    "last_read_session": "",
+    "last_model_update": "2026-05-13T06:30:24.276Z",
+    "last_model_update_verified": true
+  }
+}

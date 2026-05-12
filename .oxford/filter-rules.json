@@ -1,0 +1,129 @@
+{
+  "_doc": "Audit filter rules checked by .oxford/monitor.py against .oxford/audit.jsonl.",
+  "behavioral": {
+    "_doc": "Stateless per-event pattern matching on text/thinking blocks.",
+    "rules": [
+      {
+        "id": "F4",
+        "name": "Shortcut language",
+        "kinds": ["text", "thinking"],
+        "pattern": "just wire|bolt on|easy path|already works|path of least|good enough",
+        "description": "Rationalization patterns seen before real shortcuts"
+      },
+      {
+        "id": "F5",
+        "name": "Self-reassurance",
+        "kinds": ["text", "thinking"],
+        "pattern": "so that's fine|still works|already checks",
+        "description": "Agent reassuring itself without verifying — preceded the jsonlDir shortcut"
+      },
+      {
+        "id": "F6",
+        "name": "Compat language",
+        "kinds": ["text", "thinking"],
+        "pattern": "legacy|backward compat",
+        "description": "Rationalizing keeping dead code for backward compatibility"
+      },
+      {
+        "id": "F7",
+        "name": "Assumed-ok",
+        "kinds": ["text", "thinking"],
+        "pattern": "should still pass|should be fine|should work",
+        "description": "Assuming tests pass without running them — preceded untested Fix 4"
+      },
+      {
+        "id": "F8",
+        "name": "Thinking reassurance",
+        "kinds": ["thinking"],
+        "pattern": "that's fine|good enough|close enough",
+        "description": "Self-reassurance in internal reasoning before it reaches visible output"
+      },
+      {
+        "id": "F9",
+        "name": "Manual test only",
+        "kinds": ["text", "thinking"],
+        "pattern": "manual.*test|test.*manual|manual.*verif",
+        "description": "Plan or implementation declares a step tested manually only — skipping red-green. Pure functions in the same file inherit the gap."
+      },
+      {
+        "id": "F10",
+        "name": "Untestable claim",
+        "kinds": ["text", "thinking"],
+        "pattern": "not directly testable|can't test|harder to test|browser context.*test",
+        "description": "Framing code as untestable to justify skipping tests. Pure functions in browser-context files are still testable if extracted."
+      }
+    ]
+  },
+  "companion": {
+    "_doc": "Stateful cross-event rules. If trigger file is edited, companion file(s) must also be edited within the timeout window. 'any: true' means at least one companion suffices.",
+    "timeout_seconds": 120,
+    "rules": [
+      {
+        "id": "C1",
+        "name": "Schema change without test",
+        "trigger": "src/diagram/types.ts",
+        "companions": ["tests/render.test.ts", "tests/storage.test.ts"],
+        "any": true,
+        "description": "Changing diagram types without updating any render or storage test"
+      },
+      {
+        "id": "C2",
+        "name": "Renderer change without test",
+        "trigger": "src/diagram/render.ts",
+        "companions": ["tests/render.test.ts"],
+        "description": "Changing the renderer without updating its tests"
+      },
+      {
+        "id": "C3",
+        "name": "Daemon change without test",
+        "trigger": "src/audit/daemon.ts",
+        "companions": ["tests/daemon.test.ts"],
+        "description": "Changing the daemon without updating its tests"
+      },
+      {
+        "id": "C4",
+        "name": "Type change without renderer update",
+        "trigger": "src/diagram/types.ts",
+        "companions": ["src/diagram/render.ts"],
+        "description": "Adding/changing a type field the renderer should know about"
+      },
+      {
+        "id": "C5",
+        "name": "Renderer change without type definition",
+        "trigger": "src/diagram/render.ts",
+        "companions": ["src/diagram/types.ts"],
+        "description": "Renderer consuming a new field that isn't defined in types"
+      },
+      {
+        "id": "C6",
+        "name": "Storage change without test",
+        "trigger": "src/diagram/storage.ts",
+        "companions": ["tests/storage.test.ts"],
+        "description": "Changing storage I/O without updating its tests"
+      }
+    ]
+  },
+  "retired": {
+    "_doc": "Rules that were tried and found to be ineffective. Kept for history.",
+    "rules": [
+      {
+        "id": "F1", "name": "No hardcoded JSONL dir", "reason": "Fires on removal edits too — old_string triggers false positive"
+      },
+      {
+        "id": "F2", "name": "Extension imports audit/", "reason": "Same false positive on removal edits"
+      },
+      {
+        "id": "F3", "name": "No auto-spawn daemon", "reason": "Same false positive on removal edits"
+      },
+      {
+        "id": "R1", "name": "StatusResult active_session", "reason": "Fires on the edit that fixes it — better as post-hoc grep"
+      },
+      {
+        "id": "R2", "name": "daemon_main validation", "reason": "Only catches Write not Edit — better as post-hoc grep"
+      },
+      {
+        "id": "R3", "name": "jsonlDir in daemon.ts", "reason": "Fires on removal — better as post-hoc grep"
+      }
+    ]
+  }
+}

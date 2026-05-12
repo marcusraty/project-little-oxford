@@ -2,12 +2,12 @@ import * as esbuild from 'esbuild';
 
 const watch = process.argv.includes('--watch');
 
-// PROJECT_VIEWER_DEBUG=1 turns on the diagnostics subsystem. Default off so
+// OXFORD_DEBUG=1 turns on the diagnostics subsystem. Default off so
 // `npm run build` produces a clean production bundle. The constant is
 // injected via esbuild `define` so `if (__DEBUG__) { … }` becomes
 // `if (false) { … }` in prod and the diagnostics imports inside that
 // branch become tree-shakeable.
-const debug = process.env.PROJECT_VIEWER_DEBUG === '1';
+const debug = process.env.OXFORD_DEBUG === '1';
 
 const define = {
   __DEBUG__: debug ? 'true' : 'false',
@@ -61,17 +61,13 @@ const replayCfg = {
   define,
 };
 
+const allConfigs = [extensionCfg, webviewCfg, replayCfg];
+
 if (watch) {
-  const ext = await esbuild.context(extensionCfg);
-  const web = await esbuild.context(webviewCfg);
-  const rep = await esbuild.context(replayCfg);
-  await Promise.all([ext.watch(), web.watch(), rep.watch()]);
+  const contexts = await Promise.all(allConfigs.map((c) => esbuild.context(c)));
+  await Promise.all(contexts.map((c) => c.watch()));
   console.log(`watching… (debug=${debug})`);
 } else {
-  await Promise.all([
-    esbuild.build(extensionCfg),
-    esbuild.build(webviewCfg),
-    esbuild.build(replayCfg),
-  ]);
+  await Promise.all(allConfigs.map((c) => esbuild.build(c)));
   console.log(`built (debug=${debug})`);
 }

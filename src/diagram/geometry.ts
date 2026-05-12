@@ -1,4 +1,4 @@
-// Project Viewer — pure geometry helpers shared between renderer and webview.
+// little-oxford — pure geometry helpers shared between renderer and webview.
 //
 // The renderer uses these to lay out edges at SVG-build time. The webview
 // re-uses them during drag to recompute the same endpoints / label / badge

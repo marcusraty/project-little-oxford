@@ -1,38 +1,25 @@
-// Project Viewer — status bar item ("the pill").
-//
-// The status bar is the strip along the bottom edge of the VS Code window.
-// We put one item on it: a clickable pill that shows the current component
-// count and opens the diagram when clicked.
+// little-oxford — status bar item ("the pill").
 
 import * as vscode from 'vscode';
 import { readDiagram } from '../diagram/storage';
 
 let statusBar: vscode.StatusBarItem | undefined;
+let currentAuditWarnings = 0;
+let currentAuditErrors = 0;
 
-// Right-aligned, priority 100 (higher priority = further left within the
-// right group). Pushed onto context.subscriptions so VS Code disposes it
-// automatically on extension unload.
 export function createStatusBar(context: vscode.ExtensionContext): void {
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  statusBar.command = 'projectViewer.show';
-  statusBar.tooltip = 'Project Viewer — click to open';
+  statusBar.command = 'little-oxford.pillMenu';
+  statusBar.tooltip = 'little-oxford — click for diagram, help, etc.';
   context.subscriptions.push(statusBar);
+
   void updateStatusBar();
 }
 
-// Updates the text shown in the pill. Called on activation and after every
-// render. The `$(graph)` syntax is VS Code's way of embedding a Codicon
-// icon inline — see https://code.visualstudio.com/api/references/icons-in-labels
-//
-// Both args are optional: if `componentCount` is omitted, we read the
-// diagram from disk to figure it out (used on activation, before any
-// render has happened).
 export async function updateStatusBar(componentCount?: number, warningCount?: number): Promise<void> {
   if (!statusBar) return;
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!root) {
-    // No folder open in VS Code → nothing for us to show. Hide the pill
-    // so we don't clutter the status bar with an inert item.
     statusBar.hide();
     return;
   }
@@ -40,10 +27,34 @@ export async function updateStatusBar(componentCount?: number, warningCount?: nu
     const d = await readDiagram(root);
     componentCount = d ? Object.keys(d.components ?? {}).length : 0;
   }
-  let text = `$(graph) Project Viewer: ${componentCount}`;
-  if (warningCount && warningCount > 0) {
-    text += ` · ${warningCount} ⚠`;
-  }
-  statusBar.text = text;
+  rebuildText(componentCount, warningCount ?? 0);
+}
+
+export function updateStatusBarAudit(warnings: number, errors: number): void {
+  currentAuditWarnings = warnings;
+  currentAuditErrors = errors;
+  if (statusBar) rebuildText();
+}
+
+let lastComponentCount = 0;
+let lastWarningCount = 0;
+
+function rebuildText(componentCount?: number, warningCount?: number): void {
+  if (!statusBar) return;
+  if (componentCount !== undefined) lastComponentCount = componentCount;
+  if (warningCount !== undefined) lastWarningCount = warningCount;
+
+  statusBar.text = 'little-oxford';
+  const totalAlerts = currentAuditWarnings + currentAuditErrors;
+  statusBar.tooltip = [
+    `little-oxford: ${lastComponentCount} components`,
+    lastWarningCount > 0 ? `${lastWarningCount} diagram warnings` : null,
+    totalAlerts > 0 ? `${totalAlerts} audit alerts (${currentAuditErrors} errors)` : null,
+  ].filter(Boolean).join('\n');
+
+  statusBar.backgroundColor = currentAuditErrors > 0
+    ? new vscode.ThemeColor('statusBarItem.errorBackground')
+    : undefined;
+
   statusBar.show();
 }

@@ -1,4 +1,4 @@
-// Project Viewer — diagram type definitions.
+// little-oxford — diagram type definitions.
 //
 // Pure shapes only. No imports, no fs, no behavior. Anything that operates
 // on a Diagram (read/write, render) lives in sibling files.
@@ -85,6 +85,15 @@ export interface Layout {
   canvasWidth?: number;
   canvasHeight?: number;
   components?: Record<string, { x: number; y: number; w: number; h: number }>;
+}
+
+export interface ActivityEntry {
+  last_read: string;
+  last_read_session: string;
+  last_edit?: string;
+  last_edit_session?: string;
+  last_model_update?: string;
+  last_model_update_verified?: boolean;
 }
 
 // The whole diagram, as it lives on disk. `_notes` is a bag the wizard /

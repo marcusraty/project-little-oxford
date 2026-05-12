@@ -1,4 +1,4 @@
-// Project Viewer — anchor resolution.
+// little-oxford — anchor resolution.
 //
 // Splits an anchor `value` (as authored in model.json — `"path"` or
 // `"path:symbol"`) into a workspace-absolute path and an optional symbol

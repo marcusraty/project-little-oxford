@@ -1,0 +1,92 @@
+{
+  "components": {
+    "web_server": {
+      "kind": "service",
+      "label": "Web Server",
+      "parent": null
+    },
+    "api_gateway": {
+      "kind": "service",
+      "label": "API Gateway",
+      "parent": null
+    },
+    "backend": {
+      "kind": "package",
+      "label": "Backend Services",
+      "parent": null
+    },
+    "auth_svc": {
+      "kind": "service",
+      "label": "Auth Service",
+      "parent": "backend"
+    },
+    "user_svc": {
+      "kind": "service",
+      "label": "User Service",
+      "parent": "backend"
+    },
+    "database": {
+      "kind": "storage",
+      "label": "Database",
+      "parent": null
+    },
+    "router": {
+      "kind": "gateway",
+      "label": "Router",
+      "parent": null
+    },
+    "cache": {
+      "kind": "service",
+      "label": "Cache",
+      "parent": null
+    }
+  },
+  "relationships": {
+    "web_to_api": {
+      "kind": "http",
+      "from": "web_server",
+      "to": "api_gateway"
+    },
+    "api_to_backend": {
+      "kind": "routes_to",
+      "from": "api_gateway",
+      "to": "backend"
+    },
+    "api_to_router": {
+      "kind": "routes_to",
+      "from": "api_gateway",
+      "to": "router"
+    },
+    "backend_to_db": {
+      "kind": "queries",
+      "from": "backend",
+      "to": "database"
+    },
+    "auth_to_db": {
+      "kind": "queries",
+      "from": "auth_svc",
+      "to": "database"
+    }
+  },
+  "rules": {
+    "component_styles": {
+      "service": { "symbol": "rectangle", "color": "#38bdf8" },
+      "package": { "symbol": "rectangle", "color": "#cbd5e1", "border": "dashed" },
+      "storage": { "symbol": "cylinder", "color": "#2b6cb0" },
+      "gateway": { "symbol": "diamond", "color": "#f59e0b" }
+    }
+  },
+  "overrides": {},
+  "layout": {
+    "components": {
+      "web_server": { "x": 100, "y": 100, "w": 220, "h": 80 },
+      "api_gateway": { "x": 400, "y": 100, "w": 220, "h": 80 },
+      "backend": { "x": 100, "y": 300, "w": 500, "h": 250 },
+      "auth_svc": { "x": 40, "y": 60, "w": 220, "h": 80 },
+      "user_svc": { "x": 270, "y": 60, "w": 220, "h": 80 },
+      "database": { "x": 700, "y": 400, "w": 220, "h": 80 },
+      "router": { "x": 700, "y": 100, "w": 220, "h": 80 },
+      "cache": { "x": 1000, "y": 100, "w": 220, "h": 80 }
+    }
+  }
+}

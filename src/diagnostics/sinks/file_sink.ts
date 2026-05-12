@@ -1,4 +1,4 @@
-// Project Viewer — JSONL file sink.
+// little-oxford — JSONL file sink.
 //
 // Appends each event as a single JSON line. Writes are queued through one
 // awaiting promise chain so concurrent emit() calls don't interleave bytes.
