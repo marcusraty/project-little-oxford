@@ -65,7 +65,7 @@ When a rule fires, the result fans out to four sinks:
 
 ## Install
 
-Not on the VS Code Marketplace yet. Grab the `.vsix` from the latest [release](https://github.com/marcusraty/little-oxford/releases) (or build it yourself — see [Develop](#develop)).
+Not on the VS Code Marketplace yet. Grab the `.vsix` from the latest [release](https://github.com/marcusraty/project-little-oxford/releases) (or build it yourself — see [Develop](#develop)).
 
 Install it in VS Code:
 
@@ -102,7 +102,7 @@ To **edit or import audit rules later**, click the ⚙ button in the top-right o
 Build from source — clones the repo, installs deps, packages a `.vsix`, and installs it into your VS Code:
 
 ```
-git clone https://github.com/marcusraty/little-oxford.git
+git clone https://github.com/marcusraty/project-little-oxford.git
 cd little-oxford
 npm install
 npm run install:local     # build → npm run package → code --install-extension
@@ -124,7 +124,7 @@ npm run typecheck
 **Debug (F5):** VS Code won't open the same folder in two windows, so use a second clone as a debug workspace.
 
 ```
-git clone https://github.com/marcusraty/little-oxford.git ~/code/little-oxford-debug
+git clone https://github.com/marcusraty/project-little-oxford.git ~/code/little-oxford-debug
 ```
 
 1. Open this repo in your source window.
