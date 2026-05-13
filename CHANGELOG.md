@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.1]
+
+### Fixed
+
+- **Packaged `.vsix` was bloated.** `.vscodeignore` was missing entries for `coverage/`, `test-results/`, and several stale `dist/` artifacts from older build configurations (`audit_webview.js`, `build-harness.js`, `debug_dev.js`, `gen_audit_harness.js`, `gen_fixture.js`, `dist/vscode-tests/`). The v0.2.0 package shipped at 6.6 MB / 266 files. v0.2.1 ships at 2.4 MB / 12 files containing only what the extension actually loads (`dist/extension.js`, `dist/webview.js`, the schema, screenshots, README, BOOTSTRAP, CHANGELOG, LICENSE, package.json).
+- **README clone URL pointed at the wrong repo.** Three occurrences of `https://github.com/marcusraty/little-oxford.git` corrected to `https://github.com/marcusraty/project-little-oxford.git`. Anyone copy-pasting the clone command from the README in v0.2.0 hit a 404.
+
 ## [0.2.0]
 
 ### Added

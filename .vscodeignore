@@ -14,12 +14,26 @@ node_modules/**
 # Sourcemaps
 **/*.map
 
-# Dist files the extension doesn't need (CLI, daemon, replay, tests)
+# Dist files the extension doesn't need
+# Only dist/extension.js and dist/webview.js are loaded at runtime.
 dist/cli.js
 dist/daemon_main.js
 dist/replay.js
 dist/tests.js
 dist/wizard.js
+dist/audit_webview.js
+dist/build-harness.js
+dist/debug_dev.js
+dist/gen_audit_harness.js
+dist/gen_fixture.js
+dist/vscode-tests/**
+
+# Test artefacts / dev tooling — never shipped
+coverage/**
+test-results/**
+playwright.config.ts
+posts/**
+.vscode/**
 
 # Local-only state
 .claude/**
