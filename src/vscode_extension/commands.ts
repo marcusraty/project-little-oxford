@@ -15,6 +15,8 @@ import { loadRules } from '../audit/rules';
 import { ALL_DEFAULT_RULES } from '../audit/default_rules';
 import { showPanel } from './panel';
 import { HELP_COMMAND_ID, helpMenuItems } from './help';
+import { initializeProject, getInitState } from './initialize';
+import { MONITOR_COPY_TEXT } from './monitor';
 import type { ExtensionState } from './extension_state';
 
 export async function reloadRules(state: ExtensionState, root: string): Promise<void> {
@@ -139,6 +141,29 @@ export function registerCommands(
       }
       await reloadRules(state, root);
       vscode.window.showInformationMessage(`little-oxford: Imported ${imported} rule file(s).`);
+    }),
+
+    vscode.commands.registerCommand('little-oxford.initialize', async () => {
+      const root = state.requireWorkspace();
+      if (!root) return;
+      await initializeProject(root);
+      await reloadRules(state, root);
+      state.auditView?.refreshInitState();
+      vscode.window.showInformationMessage('little-oxford: Audit engine initialized.');
+    }),
+
+    vscode.commands.registerCommand('little-oxford.getInitState', async () => {
+      const root = state.requireWorkspace();
+      if (!root) return { initialized: false, hasMonitor: false, hasRules: false };
+      return getInitState(root);
+    }),
+
+    vscode.commands.registerCommand('little-oxford._testCopyMonitorMessage', async () => {
+      const root = state.requireWorkspace();
+      if (!root) return;
+      const s = await getInitState(root);
+      if (!s.initialized) return;
+      await vscode.env.clipboard.writeText(MONITOR_COPY_TEXT);
     }),
 
     vscode.commands.registerCommand('little-oxford.bootstrap', async () => {

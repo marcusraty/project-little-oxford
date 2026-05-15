@@ -302,3 +302,39 @@ test('A29: monitor status has copy command button', async ({ page }) => {
   const copyBtn = page.locator('.monitor-copy');
   await expect(copyBtn).toBeVisible();
 });
+
+// --- Initialize banner / gated copy button ---
+
+test('A40: init banner is visible by default (uninitialized state)', async ({ page }) => {
+  const banner = page.locator('#init-banner');
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText('Audit engine not initialized');
+});
+
+test('A41: copy button is disabled by default', async ({ page }) => {
+  const copyBtn = page.locator('#monitor-copy');
+  await expect(copyBtn).toHaveAttribute('disabled', /.*/);
+});
+
+test('A42: init-state initialized=true hides banner and enables copy button', async ({ page }) => {
+  await post(page, { type: 'init-state', initialized: true, hasMonitor: true, hasRules: true });
+  await expect(page.locator('#init-banner')).toBeHidden();
+  const copyBtn = page.locator('#monitor-copy');
+  await expect(copyBtn).not.toHaveAttribute('disabled', /.*/);
+});
+
+test('A43: clicking Initialize posts initialize message to host', async ({ page }) => {
+  await page.click('#init-btn');
+  const messages = await getMessages(page);
+  const initMsg = messages.find((m: any) => m.type === 'initialize');
+  expect(initMsg).toBeDefined();
+});
+
+test('A44: re-flipping to uninitialized restores banner and disables copy', async ({ page }) => {
+  await post(page, { type: 'init-state', initialized: true, hasMonitor: true, hasRules: true });
+  await expect(page.locator('#init-banner')).toBeHidden();
+
+  await post(page, { type: 'init-state', initialized: false, hasMonitor: false, hasRules: false });
+  await expect(page.locator('#init-banner')).toBeVisible();
+  await expect(page.locator('#monitor-copy')).toHaveAttribute('disabled', /.*/);
+});
