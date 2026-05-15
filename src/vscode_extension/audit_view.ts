@@ -13,6 +13,7 @@ import { isPathWithin } from '../audit/path_safety';
 import { buildHtml } from './audit_view_html';
 import { toWebviewEvent, toWebviewEventSync, timeAgo, type WebviewEvent } from './audit_view_format';
 import { MONITOR_COPY_TEXT } from './monitor';
+import { getInitState } from './initialize';
 
 // Re-export buildHtml so existing tests that import it from this module
 // keep working without churn.
@@ -106,6 +107,12 @@ export class AuditViewProvider implements vscode.WebviewViewProvider {
     this.postToWebview({ type: 'monitor-status', running });
   }
 
+  async refreshInitState(): Promise<void> {
+    if (!this.root) return;
+    const s = await getInitState(this.root);
+    this.postToWebview({ type: 'init-state', ...s });
+  }
+
   notifyRulesReloaded(count: number, timestamp: number = Date.now()): void {
     this.lastRulesReload = { timestamp, count };
     this.postRulesReloaded();
@@ -173,8 +180,19 @@ export class AuditViewProvider implements vscode.WebviewViewProvider {
         vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(this.jsonlDir));
       }
       if (msg.type === 'copy-monitor-command') {
-        vscode.env.clipboard.writeText(MONITOR_COPY_TEXT);
-        vscode.window.showInformationMessage('Monitor instructions copied — paste into Claude Code chat.');
+        void (async () => {
+          if (!this.root) return;
+          const s = await getInitState(this.root);
+          if (!s.initialized) {
+            vscode.window.showWarningMessage('little-oxford: Initialize the audit engine before copying the monitor command.');
+            return;
+          }
+          await vscode.env.clipboard.writeText(MONITOR_COPY_TEXT);
+          vscode.window.showInformationMessage('Monitor instructions copied — paste into Claude Code chat.');
+        })();
+      }
+      if (msg.type === 'initialize') {
+        void vscode.commands.executeCommand('little-oxford.initialize');
       }
       if (msg.type === 'open-monitor-feed' && this.root) {
         const feedPath = vscode.Uri.file(this.root + '/.oxford/.monitor_feed');
@@ -186,6 +204,7 @@ export class AuditViewProvider implements vscode.WebviewViewProvider {
     });
 
     void this.reload();
+    void this.refreshInitState();
   }
 
   private buildRuleMatchData(): Record<string, { ruleId: string; ruleName: string; severity: string }> {

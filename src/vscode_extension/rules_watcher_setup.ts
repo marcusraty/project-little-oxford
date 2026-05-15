@@ -24,6 +24,7 @@ export function setupRulesWatcher(
         await reloadRules(state, root);
         const count = state.ruleEngine?.getRules().length ?? 0;
         auditView.notifyRulesReloaded(count);
+        await auditView.refreshInitState();
       } catch (e) {
         state.log(`Rules reload failed: ${(e as Error)?.message ?? e}`);
       }
@@ -34,7 +35,15 @@ export function setupRulesWatcher(
   watcher.onDidCreate(trigger);
   watcher.onDidDelete(trigger);
 
+  const monitorWatcher = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(root, '.oxford/monitor.sh'),
+  );
+  const refreshInit = (): void => { void auditView.refreshInitState(); };
+  monitorWatcher.onDidCreate(refreshInit);
+  monitorWatcher.onDidDelete(refreshInit);
+
   context.subscriptions.push(watcher);
+  context.subscriptions.push(monitorWatcher);
   context.subscriptions.push({
     dispose: () => { if (timer) { clearTimeout(timer); timer = undefined; } },
   });

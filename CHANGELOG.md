@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.2]
+
+### Added
+
+- **`little-oxford: Initialize Audit Engine` command.** Scaffolds `.oxford/rules/behavioral.json` and `.oxford/rules/companion.json` from the default rule set, plus an executable `.oxford/monitor.sh`. Idempotent. If user-authored rule files already exist in `.oxford/rules/`, defaults are not written — the user's rules are preserved.
+- **Audit panel initialization banner.** When the audit engine is not initialized (no `monitor.sh` and no rules on disk), the audit panel shows a warning banner with an "Initialize" button. Clicking the button runs the new initialize command and the banner clears automatically.
+- **Filesystem watcher on `.oxford/monitor.sh`.** Init state refreshes reactively if the script is deleted or recreated outside the extension. Existing rules-dir watcher also refreshes init state on rule file changes.
+
+### Changed
+
+- **Copy command button is gated on init state.** Previously the Copy command button on the audit panel would copy the monitor instructions regardless of whether `.oxford/monitor.sh` existed in the target project — which led to Claude failing to start the monitor in fresh projects. Now the button is disabled (with an explanatory tooltip) until the project is initialized; the postMessage handler also no-ops as defense-in-depth and surfaces a warning toast if invoked while uninitialized.
+
+### Testing
+
+- 7 new VS Code integration tests (V40–V46) covering command registration, file scaffolding, idempotency, user-rules preservation, init-state introspection, and gated copy behavior.
+- 5 new Playwright tests (A40–A44) against the auto-generated audit harness covering banner visibility, the `disabled` attribute on the copy button, the `init-state` postMessage flow, and the Initialize button posting `{type: 'initialize'}` back to the host.
+
 ## [0.2.1]
 
 ### Fixed
@@ -60,5 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Initial release. Diagram rendering from `.oxford/model.json`, drag-to-pin layout persistence, click-to-jump-to-source, hover tooltips with file activity timestamps, multi-session audit panel.
 
+[0.2.2]: https://github.com/marcusraty/project-little-oxford/releases/tag/v0.2.2
+[0.2.1]: https://github.com/marcusraty/project-little-oxford/releases/tag/v0.2.1
 [0.2.0]: https://github.com/marcusraty/little-oxford/releases/tag/v0.2.0
 [0.1.0]: https://github.com/marcusraty/little-oxford/releases/tag/v0.1.0

@@ -283,4 +283,104 @@ suite('Integration', () => {
 
     fs.unlinkSync(newRulePath);
   });
+
+  // ---------- Initialize (audit engine scaffolding) ----------
+
+  function cleanOxford(): void {
+    const oxford = path.join(root(), '.oxford');
+    for (const f of ['monitor.sh']) {
+      try { fs.unlinkSync(path.join(oxford, f)); } catch {}
+    }
+    const rulesDir = path.join(oxford, 'rules');
+    try {
+      for (const f of fs.readdirSync(rulesDir)) {
+        if (f.endsWith('.json')) fs.unlinkSync(path.join(rulesDir, f));
+      }
+    } catch {}
+  }
+
+  test('V40: initialize command exists', async () => {
+    const all = await vscode.commands.getCommands(true);
+    assert.ok(all.includes('little-oxford.initialize'), 'little-oxford.initialize is registered');
+  });
+
+  test('V41: initialize writes monitor.sh (executable) and default rule files', async () => {
+    cleanOxford();
+    await vscode.commands.executeCommand('little-oxford.initialize');
+
+    const monitor = path.join(root(), '.oxford', 'monitor.sh');
+    assert.ok(fs.existsSync(monitor), 'monitor.sh created');
+    assert.ok(fs.statSync(monitor).mode & 0o111, 'monitor.sh is executable');
+
+    const rulesDir = path.join(root(), '.oxford', 'rules');
+    const ruleFiles = fs.readdirSync(rulesDir).filter((f) => f.endsWith('.json'));
+    assert.ok(ruleFiles.includes('behavioral.json'), 'behavioral.json created');
+    assert.ok(ruleFiles.includes('companion.json'), 'companion.json created');
+
+    const beh = JSON.parse(fs.readFileSync(path.join(rulesDir, 'behavioral.json'), 'utf8'));
+    assert.ok(Array.isArray(beh.rules) && beh.rules.length > 0, 'behavioral.json has rules');
+  });
+
+  test('V42: initialize is idempotent — second call does not throw or overwrite', async () => {
+    cleanOxford();
+    await vscode.commands.executeCommand('little-oxford.initialize');
+
+    const behPath = path.join(root(), '.oxford', 'rules', 'behavioral.json');
+    const firstMtime = fs.statSync(behPath).mtimeMs;
+    await new Promise((r) => setTimeout(r, 50));
+
+    await vscode.commands.executeCommand('little-oxford.initialize');
+    const secondMtime = fs.statSync(behPath).mtimeMs;
+    assert.equal(secondMtime, firstMtime, 'existing behavioral.json was not rewritten');
+  });
+
+  test('V43: initialize preserves user-authored rule files (no overwrite of existing rules dir)', async () => {
+    cleanOxford();
+    const rulesDir = path.join(root(), '.oxford', 'rules');
+    fs.mkdirSync(rulesDir, { recursive: true });
+    const customPath = path.join(rulesDir, 'custom.json');
+    fs.writeFileSync(customPath, JSON.stringify({
+      rules: [{ id: 'CUSTOM1', name: 'Custom', kinds: ['text'], pattern: 'whatever', action: 'notify', severity: 'warning' }],
+    }), 'utf8');
+
+    await vscode.commands.executeCommand('little-oxford.initialize');
+
+    assert.ok(fs.existsSync(customPath), 'user-authored custom.json preserved');
+    assert.ok(!fs.existsSync(path.join(rulesDir, 'behavioral.json')), 'did not write defaults because user rules exist');
+    assert.ok(fs.existsSync(path.join(root(), '.oxford', 'monitor.sh')), 'monitor.sh still written');
+
+    fs.unlinkSync(customPath);
+  });
+
+  test('V44: getInitState reflects on-disk state', async () => {
+    cleanOxford();
+    const before = await vscode.commands.executeCommand('little-oxford.getInitState') as { initialized: boolean };
+    assert.equal(before.initialized, false, 'initialized=false when no monitor.sh + no rules');
+
+    await vscode.commands.executeCommand('little-oxford.initialize');
+
+    const after = await vscode.commands.executeCommand('little-oxford.getInitState') as { initialized: boolean };
+    assert.equal(after.initialized, true, 'initialized=true after running initialize');
+  });
+
+  test('V45: copy-monitor-command message no-ops when uninitialized', async () => {
+    cleanOxford();
+    await vscode.env.clipboard.writeText('SENTINEL_BEFORE_TEST');
+
+    await vscode.commands.executeCommand('little-oxford._testCopyMonitorMessage');
+
+    const clip = await vscode.env.clipboard.readText();
+    assert.equal(clip, 'SENTINEL_BEFORE_TEST', 'clipboard unchanged because uninitialized');
+  });
+
+  test('V46: copy-monitor-command writes clipboard once initialized', async () => {
+    cleanOxford();
+    await vscode.commands.executeCommand('little-oxford.initialize');
+    await vscode.env.clipboard.writeText('SENTINEL_BEFORE_TEST');
+
+    await vscode.commands.executeCommand('little-oxford._testCopyMonitorMessage');
+
+    const clip = await vscode.env.clipboard.readText();
+    assert.ok(clip.includes('little-oxford audit monitor'), 'clipboard contains MONITOR_COPY_TEXT');
+  });
 });

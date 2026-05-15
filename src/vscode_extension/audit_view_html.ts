@@ -204,10 +204,39 @@ export function buildHtml(): string {
     color: var(--vscode-descriptionForeground, #666);
   }
   .hidden { display: none !important; }
+  .init-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--vscode-inputValidation-warningBackground, #4a3a00);
+    border-bottom: 1px solid var(--vscode-inputValidation-warningBorder, #b89500);
+    color: var(--vscode-inputValidation-warningForeground, #fff);
+    font-size: 11px;
+  }
+  .init-banner-text { flex: 1; }
+  .init-btn {
+    background: var(--vscode-button-background, #0e639c);
+    color: var(--vscode-button-foreground, #fff);
+    border: none;
+    padding: 3px 10px;
+    font-size: 11px;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .init-btn:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+  .monitor-copy[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 </style>
 </head>
 <body>
   <div class="events-pane">
+    <div class="init-banner hidden" id="init-banner">
+      <span class="init-banner-text">Audit engine not initialized — default rules and monitor script are missing.</span>
+      <button class="init-btn" id="init-btn" title="Scaffold default rules and monitor script">Initialize</button>
+    </div>
     <div class="monitor-status">
       <span class="monitor-dot" id="monitor-dot"></span>
       <span class="monitor-label" id="monitor-label">Monitor not connected</span>
@@ -254,7 +283,25 @@ export function buildHtml(): string {
   const monitorOpen = document.getElementById('monitor-open');
   const rulesStatus = document.getElementById('rules-status');
   const helpLink = document.getElementById('help-link');
+  const initBanner = document.getElementById('init-banner');
+  const initBtn = document.getElementById('init-btn');
   if (helpLink) helpLink.addEventListener('click', () => vscode.postMessage({ type: 'open-help' }));
+  if (initBtn) initBtn.addEventListener('click', () => vscode.postMessage({ type: 'initialize' }));
+
+  function applyInitState(state) {
+    const initialized = !!(state && state.initialized);
+    if (initBanner) initBanner.classList.toggle('hidden', initialized);
+    if (monitorCopy) {
+      if (initialized) {
+        monitorCopy.removeAttribute('disabled');
+        monitorCopy.title = 'Copy command to start the monitor';
+      } else {
+        monitorCopy.setAttribute('disabled', 'true');
+        monitorCopy.title = 'Run Initialize first';
+      }
+    }
+  }
+  applyInitState({ initialized: false });
 
   monitorCopy.addEventListener('click', () => {
     vscode.postMessage({ type: 'copy-monitor-command' });
@@ -415,6 +462,9 @@ export function buildHtml(): string {
     if (msg.type === 'rules-reloaded') {
       lastRulesReload = { timestamp: msg.timestamp, count: msg.count };
       refreshRulesStatus();
+    }
+    if (msg.type === 'init-state') {
+      applyInitState(msg);
     }
   });
 

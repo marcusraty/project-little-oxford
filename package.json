@@ -2,7 +2,7 @@
   "name": "little-oxford",
   "displayName": "little-oxford",
   "description": "Render a JSON architecture diagram in VS Code.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "marcusraty",
   "private": true,
   "license": "MIT",
@@ -38,6 +38,10 @@
       {
         "command": "little-oxford.bootstrap",
         "title": "little-oxford: Create Starter Diagram"
+      },
+      {
+        "command": "little-oxford.initialize",
+        "title": "little-oxford: Initialize Audit Engine"
       },
       {
         "command": "little-oxford.openHelp",
